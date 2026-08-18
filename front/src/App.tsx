@@ -5,7 +5,7 @@ import {
   ArrowLeft, Search, Star, CheckCircle, Info,
   Home, BarChart2, Map, BookOpen,
   Users, TreePine, Building, Flame, Moon,
-  RefreshCw, Shield
+  RefreshCw, Shield, Plus, Minus
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -65,6 +65,23 @@ type DistrictHeatData = {
   level: string;
 };
 
+type SeoulGeoFeature = {
+  type: "Feature";
+  geometry: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates: number[][][] | number[][][][];
+  };
+  properties: {
+    SIG_KOR_NM?: string;
+    name?: string;
+  };
+};
+
+type SeoulGeoJson = {
+  type: "FeatureCollection";
+  features: SeoulGeoFeature[];
+};
+
 type ForecastRiskData = {
   date: string;
   time: string;
@@ -118,6 +135,10 @@ const DEMO_JONGNO_LOCATION = {
   lat: 37.5729,
   lon: 126.9794,
 };
+
+const SEOUL_GEOJSON_URLS = [
+  "/seoul_municipalities_geo_simple.json",
+];
 
 function isInSeoul(lat: number, lon: number) {
   return lat >= 37.4 && lat <= 37.7 && lon >= 126.75 && lon <= 127.2;
@@ -193,7 +214,7 @@ function getAgeGroup(age: number) {
   return `${start}-${start + 9}`;
 }
 
-// Seoul district SVG paths (approximate geographic boundaries, viewBox 0 0 460 440)
+// Seoul district SVG paths with approximate district-size proportions.
 const SEOUL_PATHS = [
   { name: "노원구",   risk: 62, cx: 345, cy: 62,  d: "M308,22 L382,20 L410,52 L395,92 L365,112 L335,112 L306,102 L302,78 Z" },
   { name: "도봉구",   risk: 45, cx: 272, cy: 60,  d: "M245,22 L308,22 L302,78 L306,102 L278,106 L252,88 L242,62 Z" },
@@ -202,9 +223,9 @@ const SEOUL_PATHS = [
   { name: "성북구",   risk: 49, cx: 255, cy: 140, d: "M208,116 L232,133 L262,128 L278,106 L306,102 L322,120 L320,150 L292,165 L265,170 L238,165 L218,153 L190,140 L190,128 Z" },
   { name: "중랑구",   risk: 71, cx: 362, cy: 155, d: "M320,150 L335,112 L365,112 L395,92 L410,128 L400,168 L374,184 L346,186 L320,180 L312,162 Z" },
   { name: "종로구",   risk: 91, cx: 190, cy: 190, d: "M138,165 L172,160 L190,140 L218,153 L232,170 L228,200 L216,220 L194,225 L172,220 L158,208 L148,185 Z" },
-  { name: "서대문구", risk: 54, cx: 118, cy: 192, small: true, d: "M105,152 L138,165 L148,185 L148,220 L130,228 L110,222 L94,208 L94,178 Z" },
+  { name: "서대문구", risk: 54, cx: 118, cy: 192, d: "M105,152 L138,165 L148,185 L148,220 L130,228 L110,222 L94,208 L94,178 Z" },
   { name: "동대문구", risk: 63, cx: 272, cy: 198, d: "M232,170 L265,170 L292,165 L312,182 L310,210 L288,226 L258,228 L232,218 L228,200 Z" },
-  { name: "중구",     risk: 85, cx: 196, cy: 245, small: true, d: "M172,220 L194,225 L216,220 L228,235 L222,258 L202,264 L182,260 L168,248 L168,232 Z" },
+  { name: "중구",     risk: 85, cx: 196, cy: 245, d: "M172,220 L194,225 L216,220 L228,235 L222,258 L202,264 L182,260 L168,248 L168,232 Z" },
   { name: "광진구",   risk: 74, cx: 350, cy: 235, d: "M310,210 L320,180 L346,186 L374,184 L400,205 L405,238 L390,268 L360,282 L330,284 L306,278 L286,268 L286,252 L306,242 L312,222 Z" },
   { name: "성동구",   risk: 66, cx: 268, cy: 256, d: "M232,218 L258,228 L288,226 L306,242 L306,270 L286,286 L258,290 L234,286 L226,272 L226,248 L232,235 Z" },
   { name: "마포구",   risk: 68, cx: 112, cy: 255, d: "M94,208 L110,222 L130,228 L148,238 L148,270 L140,296 L116,306 L90,298 L74,280 L70,256 L76,230 Z" },
@@ -215,7 +236,7 @@ const SEOUL_PATHS = [
   { name: "영등포구", risk: 72, cx: 154, cy: 330, d: "M140,296 L157,300 L170,308 L184,320 L180,346 L166,358 L146,360 L130,348 L130,325 L140,310 Z" },
   { name: "동작구",   risk: 59, cx: 185, cy: 345, d: "M157,308 L174,312 L188,310 L206,322 L203,352 L188,366 L168,368 L153,355 L147,335 L152,318 L164,310 Z" },
   { name: "구로구",   risk: 55, cx: 107, cy: 362, d: "M93,342 L113,345 L130,335 L147,347 L144,373 L126,383 L103,380 L80,366 L74,350 Z" },
-  { name: "금천구",   risk: 47, cx: 138, cy: 400, small: true, d: "M126,380 L144,375 L158,380 L160,403 L146,416 L126,413 L110,403 L112,388 Z" },
+  { name: "금천구",   risk: 47, cx: 138, cy: 400, d: "M126,380 L144,375 L158,380 L160,403 L146,416 L126,413 L110,403 L112,388 Z" },
   { name: "관악구",   risk: 69, cx: 183, cy: 395, d: "M146,360 L160,363 L172,368 L192,365 L207,376 L204,403 L187,416 L164,419 L143,412 L128,400 L128,382 L146,370 Z" },
   { name: "서초구",   risk: 32, cx: 222, cy: 375, d: "M206,322 L232,315 L258,312 L275,328 L280,358 L275,390 L257,406 L230,413 L206,406 L194,390 L192,368 L203,352 Z" },
   { name: "강남구",   risk: 41, cx: 318, cy: 340, d: "M286,286 L310,292 L338,290 L362,306 L368,340 L360,372 L338,384 L312,386 L290,376 L275,358 L276,328 L284,306 Z" },
@@ -224,15 +245,15 @@ const SEOUL_PATHS = [
 ];
 
 const AGE_GROUPS = [
-  { id: "80+" as AgeGroup, label: "80대 이상", sub: "80세 이상", pastel: "#FFEBEE", accent: "#B91C1C" },
-  { id: "70-79" as AgeGroup, label: "70대", sub: "70-79세", pastel: "#FFEBEE", accent: "#E53935" },
-  { id: "60-69" as AgeGroup, label: "60대", sub: "60-69세", pastel: "#FFEBEE", accent: "#E53935" },
-  { id: "50-59" as AgeGroup, label: "50대", sub: "50-59세", pastel: "#FFF3E0", accent: "#FB8C00" },
-  { id: "40-49" as AgeGroup, label: "40대", sub: "40-49세", pastel: "#FFF3E0", accent: "#FB8C00" },
-  { id: "30-39" as AgeGroup, label: "30대", sub: "30-39세", pastel: "#FFFDE7", accent: "#F9A825" },
-  { id: "20-29" as AgeGroup, label: "20대", sub: "20-29세", pastel: "#FFFDE7", accent: "#F9A825" },
-  { id: "10-19" as AgeGroup, label: "10대", sub: "10-19세", pastel: "#E8F5E9", accent: "#4CAF50" },
   { id: "0-9" as AgeGroup, label: "0대", sub: "0-9세", pastel: "#E8F5E9", accent: "#4CAF50" },
+  { id: "10-19" as AgeGroup, label: "10대", sub: "10-19세", pastel: "#E8F5E9", accent: "#4CAF50" },
+  { id: "20-29" as AgeGroup, label: "20대", sub: "20-29세", pastel: "#FFFDE7", accent: "#F9A825" },
+  { id: "30-39" as AgeGroup, label: "30대", sub: "30-39세", pastel: "#FFFDE7", accent: "#F9A825" },
+  { id: "40-49" as AgeGroup, label: "40대", sub: "40-49세", pastel: "#FFF3E0", accent: "#FB8C00" },
+  { id: "50-59" as AgeGroup, label: "50대", sub: "50-59세", pastel: "#FFF3E0", accent: "#FB8C00" },
+  { id: "60-69" as AgeGroup, label: "60대", sub: "60-69세", pastel: "#FFEBEE", accent: "#E53935" },
+  { id: "70-79" as AgeGroup, label: "70대", sub: "70-79세", pastel: "#FFEBEE", accent: "#E53935" },
+  { id: "80+" as AgeGroup, label: "80대 이상", sub: "80세 이상", pastel: "#FFEBEE", accent: "#B91C1C" },
 ];
 
 const SHELTERS = [
@@ -322,58 +343,255 @@ function RiskGauge({ score }: { score: number }) {
 
 // ─── Seoul District Map ──────────────────────────────────────────────────────
 
+function getFeatureName(feature: SeoulGeoFeature) {
+  return feature.properties.SIG_KOR_NM ?? feature.properties.name ?? "";
+}
+
+function getFeaturePolygons(feature: SeoulGeoFeature) {
+  if (feature.geometry.type === "Polygon") {
+    return feature.geometry.coordinates as number[][][];
+  }
+
+  return (feature.geometry.coordinates as number[][][][]).flat();
+}
+
+function getGeoBounds(features: SeoulGeoFeature[]) {
+  const points = features.flatMap((feature) =>
+    getFeaturePolygons(feature).flatMap((ring) => ring.map(([lon, lat]) => ({ lon, lat })))
+  );
+  const lons = points.map((point) => point.lon);
+  const lats = points.map((point) => point.lat);
+
+  return {
+    minLon: Math.min(...lons),
+    maxLon: Math.max(...lons),
+    minLat: Math.min(...lats),
+    maxLat: Math.max(...lats),
+  };
+}
+
+function createProjector(bounds: ReturnType<typeof getGeoBounds>) {
+  const width = 460;
+  const height = 420;
+  const padding = 14;
+
+  return ([lon, lat]: number[]) => {
+    const x = padding + ((lon - bounds.minLon) / (bounds.maxLon - bounds.minLon)) * (width - padding * 2);
+    const y = padding + ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * (height - padding * 2);
+
+    return [x, y];
+  };
+}
+
+function featureToPath(feature: SeoulGeoFeature, project: (point: number[]) => number[]) {
+  return getFeaturePolygons(feature)
+    .map((ring) =>
+      ring
+        .map((point, index) => {
+          const [x, y] = project(point);
+          return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+        })
+        .join(" ") + " Z"
+    )
+    .join(" ");
+}
+
+function featureLabelPoint(feature: SeoulGeoFeature, project: (point: number[]) => number[]) {
+  const ring = getFeaturePolygons(feature)
+    .map((polygonRing) => ({
+      ring: polygonRing,
+      area: Math.abs(
+        polygonRing.reduce((sum, [lon, lat], index) => {
+          const [nextLon, nextLat] = polygonRing[(index + 1) % polygonRing.length];
+          return sum + lon * nextLat - nextLon * lat;
+        }, 0)
+      ),
+    }))
+    .sort((a, b) => b.area - a.area)[0]?.ring ?? getFeaturePolygons(feature).flat();
+
+  let doubleArea = 0;
+  let centerLon = 0;
+  let centerLat = 0;
+
+  ring.forEach(([lon, lat], index) => {
+    const [nextLon, nextLat] = ring[(index + 1) % ring.length];
+    const cross = lon * nextLat - nextLon * lat;
+
+    doubleArea += cross;
+    centerLon += (lon + nextLon) * cross;
+    centerLat += (lat + nextLat) * cross;
+  });
+
+  if (Math.abs(doubleArea) > 0.0000001) {
+    centerLon = centerLon / (3 * doubleArea);
+    centerLat = centerLat / (3 * doubleArea);
+  } else {
+    centerLon = ring.reduce((sum, [lon]) => sum + lon, 0) / ring.length;
+    centerLat = ring.reduce((sum, [, lat]) => sum + lat, 0) / ring.length;
+  }
+
+  return project([centerLon, centerLat]);
+}
+
+async function fetchSeoulGeoJson() {
+  for (const url of SEOUL_GEOJSON_URLS) {
+    try {
+      const response = await fetch(url);
+
+      if (response.ok) {
+        return response.json() as Promise<SeoulGeoJson>;
+      }
+    } catch {
+      // Try the next source.
+    }
+  }
+
+  throw new Error("서울 행정경계 데이터를 불러오지 못했습니다.");
+}
+
 function SeoulMap({
   onSelect,
   selected,
   heatmapData,
+  zoom,
 }: {
   onSelect: (name: string) => void;
   selected: string;
   heatmapData: DistrictHeatData[];
+  zoom: number;
 }) {
   const dataByDistrict = new globalThis.Map(heatmapData.map((item) => [item.name, item]));
+  const [geoFeatures, setGeoFeatures] = useState<SeoulGeoFeature[]>([]);
+  const [geoLoadFailed, setGeoLoadFailed] = useState(false);
+  const bounds = geoFeatures.length ? getGeoBounds(geoFeatures) : null;
+  const project = bounds ? createProjector(bounds) : null;
+
+  useEffect(() => {
+    let canceled = false;
+
+    fetchSeoulGeoJson()
+      .then((data) => {
+        if (!canceled) {
+          setGeoFeatures(data.features);
+        }
+      })
+      .catch((error) => {
+        console.error("서울 행정경계 로드 실패:", error);
+        if (!canceled) {
+          setGeoLoadFailed(true);
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  if (geoFeatures.length && project) {
+    return (
+      <div className="relative w-full overflow-hidden rounded-2xl" style={{ paddingBottom: "94%", background: "#EEF4FA" }}>
+        <svg viewBox="0 0 460 420" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          <g
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "230px 210px",
+              transition: "transform 0.2s ease",
+            }}
+          >
+            {geoFeatures.map((feature) => {
+              const name = getFeatureName(feature);
+              const districtData = dataByDistrict.get(name);
+              const fallbackScore = SEOUL_PATHS.find((d) => d.name === name)?.risk ?? 50;
+              const score = districtData?.score ?? fallbackScore;
+              const [labelX, labelY] = featureLabelPoint(feature, project);
+
+              return (
+                <g key={name} onClick={() => onSelect(name)} style={{ cursor: "pointer" }}>
+                  <path
+                    d={featureToPath(feature, project)}
+                    fill={RISK_COLOR(score)}
+                    fillOpacity={selected === name ? 1 : 0.8}
+                    stroke="white"
+                    strokeWidth={selected === name ? 2.2 : 0.9}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ transition: "fill-opacity 0.15s, stroke-width 0.15s" }}
+                  />
+                  <text
+                    x={labelX}
+                    y={labelY + 3}
+                    textAnchor="middle"
+                    fontSize={["중구", "금천구", "종로구"].includes(name) ? "8.2" : "9.2"}
+                    fill="white"
+                    fontWeight="800"
+                    fontFamily="'Noto Sans KR', sans-serif"
+                    style={{ pointerEvents: "none", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
+                  >
+                    {name}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative w-full" style={{ paddingBottom: "96%" }}>
-      <svg viewBox="0 0 470 452" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        {/* Han River */}
-        <path
-          d="M36,310 C90,302 150,296 210,292 C270,288 330,285 390,280 L460,276 L460,296 C390,300 330,304 270,308 C210,312 148,318 90,326 L36,332 Z"
-          fill="#BBDEFB"
-          opacity="0.7"
-        />
-        {SEOUL_PATHS.map((d) => {
-          const districtData = dataByDistrict.get(d.name);
-          const score = districtData?.score ?? d.risk;
+    <div className="relative w-full overflow-hidden rounded-2xl" style={{ paddingBottom: "94%", background: "#EEF4FA" }}>
+      <svg viewBox="28 16 438 410" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+        <g
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: "230px 222px",
+            transition: "transform 0.2s ease",
+          }}
+        >
+          {/* Han River */}
+          <path
+            d="M36,310 C90,302 150,296 210,292 C270,288 330,285 390,280 L460,276 L460,296 C390,300 330,304 270,308 C210,312 148,318 90,326 L36,332 Z"
+            fill="#BBDEFB"
+            opacity="0.7"
+          />
+          {SEOUL_PATHS.map((d) => {
+            const districtData = dataByDistrict.get(d.name);
+            const score = districtData?.score ?? d.risk;
 
-          return (
-          <g key={d.name} onClick={() => onSelect(d.name)} style={{ cursor: "pointer" }}>
-            <path
-              d={d.d}
-              fill={RISK_COLOR(score)}
-              fillOpacity={selected === d.name ? 1 : 0.75}
-              stroke="white"
-              strokeWidth={selected === d.name ? 1.5 : 0.6}
-              style={{ transition: "fill-opacity 0.15s" }}
-            />
-            {!d.small && (
-              <text
-                x={d.cx}
-                y={d.cy + 4}
-                textAnchor="middle"
-                fontSize="8.5"
-                fill="white"
-                fontWeight="700"
-                fontFamily="'Noto Sans KR', sans-serif"
-                style={{ pointerEvents: "none", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}
-              >
-                {d.name.replace("구", "")}
-              </text>
-            )}
-          </g>
-          );
-        })}
+            return (
+              <g key={d.name} onClick={() => onSelect(d.name)} style={{ cursor: "pointer" }}>
+                <path
+                  d={d.d}
+                  fill={RISK_COLOR(score)}
+                  fillOpacity={selected === d.name ? 1 : 0.78}
+                  stroke="white"
+                  strokeWidth={selected === d.name ? 2.2 : 0.9}
+                  vectorEffect="non-scaling-stroke"
+                  style={{ transition: "fill-opacity 0.15s, stroke-width 0.15s" }}
+                />
+                {!d.small && (
+                  <text
+                    x={d.cx}
+                    y={d.cy + 4}
+                    textAnchor="middle"
+                    fontSize={["중구", "금천구", "서대문구"].includes(d.name) ? "8.2" : "9.5"}
+                    fill="white"
+                    fontWeight="800"
+                    fontFamily="'Noto Sans KR', sans-serif"
+                    style={{ pointerEvents: "none", textShadow: "0 1px 2px rgba(0,0,0,0.45)" }}
+                  >
+                    {d.name}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </g>
       </svg>
+      {geoLoadFailed && (
+        <p className="absolute left-3 bottom-3 rounded-full px-2.5 py-1 text-xs font-bold" style={{ background: "rgba(255,255,255,0.9)", color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>
+          임시 지도 표시 중
+        </p>
+      )}
     </div>
   );
 }
@@ -434,9 +652,10 @@ function BottomNav({
 // ─── Screens ──────────────────────────────────────────────────────────────────
 
 function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) => void }) {
-  const [age, setAge] = useState<AgeGroup | null>(null);
-  const [ageOpen, setAgeOpen] = useState(false);
-  const selectedAgeGroup = AGE_GROUPS.find((g) => g.id === age);
+  const [step, setStep] = useState<"intro" | "age">("intro");
+  const [ageIndex, setAgeIndex] = useState(0);
+  const selectedAgeGroup = AGE_GROUPS[ageIndex];
+  const age = selectedAgeGroup.id;
 
   const handleStart = () => {
     if (!age) return;
@@ -468,6 +687,32 @@ function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) 
     );
   };
 
+  if (step === "intro") {
+    return (
+      <button
+        onClick={() => setStep("age")}
+        className="flex min-h-full w-full flex-col items-center justify-center px-6 text-center"
+        style={{ background: "#183153" }}
+      >
+        <div className="relative mb-5">
+          <div className="w-24 h-24 rounded-3xl flex items-center justify-center shadow-lg" style={{ background: "rgba(255,255,255,0.12)" }}>
+            <MapPin size={34} color="white" strokeWidth={2} />
+            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "#E53935" }}>
+              <Flame size={15} color="white" strokeWidth={2.5} />
+            </div>
+          </div>
+        </div>
+        <h1 className="text-5xl font-black text-white tracking-tight mb-3" style={{ fontFamily: "Inter, sans-serif" }}>HeatMap</h1>
+        <p className="text-sm leading-relaxed mb-10" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "'Noto Sans KR', sans-serif", maxWidth: 280 }}>
+          AI 기반 폭염 위험 예측 및<br />맞춤형 대응 서비스
+        </p>
+        <div className="w-full rounded-2xl py-4 font-bold text-base" style={{ background: "white", color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>
+          화면을 터치해 시작하기
+        </div>
+      </button>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-full bg-white">
       {/* Hero */}
@@ -485,6 +730,12 @@ function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) 
         <p className="text-center text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "'Noto Sans KR', sans-serif", maxWidth: 260 }}>
           AI 기반 폭염 위험 예측 및<br />맞춤형 대응 서비스
         </p>
+        <div className="mt-5 flex gap-2.5 p-3.5 rounded-2xl" style={{ background: "rgba(255,255,255,0.12)", maxWidth: 320 }}>
+          <Info size={15} color="#F8C84E" className="flex-shrink-0 mt-0.5" />
+          <p className="text-xs leading-relaxed text-left" style={{ color: "rgba(255,255,255,0.86)", fontFamily: "'Noto Sans KR', sans-serif" }}>
+            본 서비스는 의료 진단이 아닌 참고용 AI 위험도 예측 서비스입니다.
+          </p>
+        </div>
       </div>
 
       {/* Form */}
@@ -494,45 +745,26 @@ function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) 
           <label className="block text-sm font-bold mb-3" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>
             연령대 선택
           </label>
-          <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: ageOpen ? "#183153" : "#E5E7EB", background: "#F5F7FA" }}>
-            <button
-              onClick={() => setAgeOpen(!ageOpen)}
-              className="w-full flex items-center justify-between p-4 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: selectedAgeGroup?.accent ?? "#9CA3AF" }} />
-                <div className="text-left">
-                  <span className="text-sm font-bold" style={{ color: selectedAgeGroup ? "#111827" : "#9CA3AF", fontFamily: "'Noto Sans KR', sans-serif" }}>
-                    {selectedAgeGroup ? selectedAgeGroup.label : "연령대를 선택하세요"}
-                  </span>
-                  {selectedAgeGroup && (
-                    <span className="text-xs ml-2" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>{selectedAgeGroup.sub}</span>
-                  )}
-                </div>
-              </div>
-              <ChevronRight size={17} color="#6B7280" style={{ transform: ageOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
-            </button>
-            {ageOpen && (
-              <div className="border-t" style={{ borderColor: "#E5E7EB" }}>
-                {AGE_GROUPS.map((g) => (
-                  <button
-                    key={g.id}
-                    onClick={() => {
-                      setAge(g.id);
-                      setAgeOpen(false);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left"
-                    style={{
-                      background: age === g.id ? g.pastel : "white",
-                    }}
-                  >
-                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: g.accent }} />
-                    <span className="text-sm font-bold" style={{ color: "#111827", fontFamily: "'Noto Sans KR', sans-serif" }}>{g.label}</span>
-                    <span className="text-xs" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>{g.sub}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="rounded-2xl border-2 p-5" style={{ borderColor: selectedAgeGroup.accent, background: selectedAgeGroup.pastel }}>
+            <div className="mb-5">
+              <div className="text-xs font-bold mb-1" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>선택 연령대</div>
+              <div className="text-3xl font-black" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>{selectedAgeGroup.label}</div>
+              <div className="text-sm mt-1" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>{selectedAgeGroup.sub}</div>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={AGE_GROUPS.length - 1}
+              step={1}
+              value={ageIndex}
+              onChange={(event) => setAgeIndex(Number(event.target.value))}
+              className="w-full"
+              style={{ accentColor: selectedAgeGroup.accent }}
+            />
+            <div className="flex justify-between mt-2">
+              <span className="text-xs font-bold" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>0대</span>
+              <span className="text-xs font-bold" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>80대+</span>
+            </div>
           </div>
         </div>
 
@@ -543,13 +775,6 @@ function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) 
           </p>
         </div>
 
-        {/* Disclaimer */}
-        <div className="flex gap-2.5 p-3.5 rounded-2xl" style={{ background: "#FFF3E0" }}>
-          <Info size={15} color="#FB8C00" className="flex-shrink-0 mt-0.5" />
-          <p className="text-xs leading-relaxed" style={{ color: "#78350F", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            본 서비스는 의료 진단이 아닌 참고용 AI 위험도 예측 서비스입니다.
-          </p>
-        </div>
       </div>
 
       {/* CTA */}
@@ -610,7 +835,7 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
     },
     {
       label: "녹지율",
-      value: clampPercent(100 - greenRatioPercent * 4),
+      value: clampPercent(greenRatioPercent),
       icon: TreePine,
       color: greenRatioPercent < 10 ? "#E53935" : greenRatioPercent < 20 ? "#FB8C00" : "#4CAF50",
       detail: getGreenRatioLabel(greenRatio),
@@ -619,6 +844,7 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
   const [selectedDistrict, setSelectedDistrict] = useState(district);
   const [heatmapData, setHeatmapData] = useState<DistrictHeatData[]>([]);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [mapZoom, setMapZoom] = useState(1);
   const selectedHeatData = heatmapData.find((item) => item.name === selectedDistrict);
 
   useEffect(() => {
@@ -730,11 +956,31 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
         </div>
 
         {/* Seoul Heatmap */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border" style={{ borderColor: "#F3F4F6" }}>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border" style={{ borderColor: "#F3F4F6" }}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>서울 폭염 현황 지도</h2>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMapZoom((value) => Math.max(1, Number((value - 0.18).toFixed(2))))}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: "#F3F4F6", color: "#183153" }}
+                aria-label="지도 축소"
+              >
+                <Minus size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapZoom((value) => Math.min(1.72, Number((value + 0.18).toFixed(2))))}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: "#183153", color: "white" }}
+                aria-label="지도 확대"
+              >
+                <Plus size={15} />
+              </button>
+            </div>
           </div>
-          <SeoulMap selected={selectedDistrict} onSelect={(name) => setSelectedDistrict(name)} heatmapData={heatmapData} />
+          <SeoulMap selected={selectedDistrict} onSelect={(name) => setSelectedDistrict(name)} heatmapData={heatmapData} zoom={mapZoom} />
           <div className="mt-3">
             <RiskLegend />
           </div>
@@ -835,8 +1081,8 @@ function AnalysisScreen({ riskData }: { riskData: RiskApiResponse | null }) {
       detail: `${riskData?.risk.age_group ?? "30-39"} 구간 · 가중치 ${ageFactorPercent}%`,
     },
     {
-      label: "녹지율 부족",
-      pct: clampPercent(100 - greenRatioPercent * 4),
+      label: "녹지율",
+      pct: clampPercent(greenRatioPercent),
       icon: TreePine,
       color: greenRatioPercent < 10 ? "#E53935" : greenRatioPercent < 20 ? "#FB8C00" : "#4CAF50",
       detail: `${getGreenRatioLabel(greenRatio)} · 열섬 완화 요소`,
