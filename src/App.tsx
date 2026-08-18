@@ -10,26 +10,26 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-// type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
-// type AgeGroup = "youth" | "adult" | "senior" | "elderly";
+type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
+type AgeGroup = "youth" | "adult" | "senior" | "elderly";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const RISK_COLOR = (score) => {
+const RISK_COLOR = (score: number) => {
   if (score <= 25) return "#4CAF50";
   if (score <= 50) return "#FBC02D";
   if (score <= 75) return "#FB8C00";
   return "#E53935";
 };
 
-const RISK_BG = (score) => {
+const RISK_BG = (score: number) => {
   if (score <= 25) return "#E8F5E9";
   if (score <= 50) return "#FFFDE7";
   if (score <= 75) return "#FFF3E0";
   return "#FFEBEE";
 };
 
-const RISK_LABEL = (score) => {
+const RISK_LABEL = (score: number) => {
   if (score <= 25) return "안전";
   if (score <= 50) return "주의";
   if (score <= 75) return "위험";
@@ -67,10 +67,10 @@ const SEOUL_PATHS = [
 ];
 
 const AGE_GROUPS = [
-  { id: "youth", label: "청소년", sub: "18세 미만", pastel: "#E8F5E9", accent: "#4CAF50" },
-  { id: "adult", label: "성인", sub: "18-59세", pastel: "#FFFDE7", accent: "#F9A825" },
-  { id: "senior", label: "고령자", sub: "60-74세", pastel: "#FFF3E0", accent: "#FB8C00" },
-  { id: "elderly", label: "노인", sub: "75세 이상", pastel: "#FFEBEE", accent: "#E53935" },
+  { id: "youth" as AgeGroup, label: "청소년", sub: "18세 미만", pastel: "#E8F5E9", accent: "#4CAF50" },
+  { id: "adult" as AgeGroup, label: "성인", sub: "18-59세", pastel: "#FFFDE7", accent: "#F9A825" },
+  { id: "senior" as AgeGroup, label: "고령자", sub: "60-74세", pastel: "#FFF3E0", accent: "#FB8C00" },
+  { id: "elderly" as AgeGroup, label: "노인", sub: "75세 이상", pastel: "#FFEBEE", accent: "#E53935" },
 ];
 
 const LOCATIONS = ["종로구", "중구", "용산구", "성동구", "광진구", "동대문구", "마포구", "강남구", "서초구", "송파구"];
@@ -90,7 +90,7 @@ const RISK_FACTORS = [
 
 // ─── Circular Gauge ──────────────────────────────────────────────────────────
 
-function RiskGauge({ score }) {
+function RiskGauge({ score }: { score: number }) {
   const r = 72;
   const cx = 90;
   const cy = 90;
@@ -132,7 +132,13 @@ function RiskGauge({ score }) {
 
 // ─── Seoul District Map ──────────────────────────────────────────────────────
 
-function SeoulMap({ onSelect, selected }) {
+function SeoulMap({
+  onSelect,
+  selected,
+}: {
+  onSelect: (name: string, risk: number) => void;
+  selected: string;
+}) {
   return (
     <div className="relative w-full" style={{ paddingBottom: "96%" }}>
       <svg viewBox="0 0 470 452" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -196,14 +202,20 @@ function RiskLegend() {
 
 // ─── Bottom Nav ───────────────────────────────────────────────────────────────
 
-function BottomNav({ current, onNav }) {
-  const tabs = [
-    { id: "home", icon: Home, label: "홈" },
-    { id: "analysis", icon: BarChart2, label: "분석" },
-    { id: "shelter", icon: Map, label: "쉼터" },
-    { id: "nav", icon: Compass, label: "길찾기" },
-    { id: "guide", icon: BookOpen, label: "AI 가이드" },
-  ];
+function BottomNav({
+  current,
+  onNav,
+}: {
+  current: Screen;
+  onNav: (s: Screen) => void;
+}) {
+  const tabs: { id: Screen; icon: typeof Home; label: string }[] = [
+  { id: "home", icon: Home, label: "홈" },
+  { id: "analysis", icon: BarChart2, label: "분석" },
+  { id: "shelter", icon: Map, label: "쉼터" },
+  { id: "nav", icon: Compass, label: "길찾기" },
+  { id: "guide", icon: BookOpen, label: "AI 가이드" },
+];
   return (
     <nav className="flex items-center justify-around border-t border-gray-100 bg-white px-2 pt-2 pb-safe">
       {tabs.map(({ id, icon: Icon, label }) => (
@@ -223,8 +235,8 @@ function BottomNav({ current, onNav }) {
 
 // ─── Screens ──────────────────────────────────────────────────────────────────
 
-function OnboardingScreen({ onComplete }) {
-  const [age, setAge] = useState(null);
+function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
+  const [age, setAge] = useState<AgeGroup | null>(null);
   const [location, setLocation] = useState("");
   const [locOpen, setLocOpen] = useState(false);
 
@@ -345,7 +357,7 @@ function OnboardingScreen({ onComplete }) {
 
 // ─── Home Dashboard ───────────────────────────────────────────────────────────
 
-function HomeScreen({ onNav }) {
+function HomeScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const score = 91;
   const [selectedDistrict, setSelectedDistrict] = useState("종로구");
 
@@ -622,13 +634,23 @@ function ShelterMap() {
   );
 }
 
-function ShelterScreen({ onNav }) {
+function ShelterScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const [selected, setSelected] = useState(0);
 
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
-        <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>무더위쉼터 안내</h1>
+        <h1
+  className="text-xl font-black mb-1"
+  style={{
+    color: "white",
+    fontFamily: "'Noto Sans KR', sans-serif",
+    fontWeight: 900,
+    textAlign: "left",
+  }}
+>
+  무더위쉼터 안내
+</h1>
         <p className="text-sm" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "'Noto Sans KR', sans-serif" }}>서울시 종로구 인근 쉼터 3개소 검색됨</p>
       </div>
 
@@ -707,7 +729,7 @@ function ShelterScreen({ onNav }) {
 
 // ─── Navigation Screen ────────────────────────────────────────────────────────
 
-function NavScreen({ onNav }) {
+function NavScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const [step, setStep] = useState(0);
   const steps = [
     { dir: "직진", icon: "↑", detail: "50m — 창신길 따라 직진" },
@@ -937,8 +959,8 @@ function GuideScreen() {
 const HOME_SCORE = 91;
 
 export default function App() {
-  const [screen, setScreen] = useState("onboarding");
-  const scrollRef = useRef(null);
+  const [screen, setScreen] = useState<Screen>("onboarding");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
