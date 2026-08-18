@@ -1,0 +1,19 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# secrets
+.env
+.env.*
+
+# frontend
+node_modules/
+dist/
+
+# OS/editor
+.DS_Store
+.vscode/
+
+# optional large data
+back_/data/raw/
