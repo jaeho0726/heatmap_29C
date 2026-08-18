@@ -10,26 +10,26 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
-type AgeGroup = "youth" | "adult" | "senior" | "elderly";
+// type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
+// type AgeGroup = "youth" | "adult" | "senior" | "elderly";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const RISK_COLOR = (score: number) => {
+const RISK_COLOR = (score) => {
   if (score <= 25) return "#4CAF50";
   if (score <= 50) return "#FBC02D";
   if (score <= 75) return "#FB8C00";
   return "#E53935";
 };
 
-const RISK_BG = (score: number) => {
+const RISK_BG = (score) => {
   if (score <= 25) return "#E8F5E9";
   if (score <= 50) return "#FFFDE7";
   if (score <= 75) return "#FFF3E0";
   return "#FFEBEE";
 };
 
-const RISK_LABEL = (score: number) => {
+const RISK_LABEL = (score) => {
   if (score <= 25) return "안전";
   if (score <= 50) return "주의";
   if (score <= 75) return "위험";
@@ -37,7 +37,7 @@ const RISK_LABEL = (score: number) => {
 };
 
 // Seoul district SVG paths (approximate geographic boundaries, viewBox 0 0 460 440)
-const SEOUL_PATHS: { name: string; risk: number; cx: number; cy: number; small?: boolean; d: string }[] = [
+const SEOUL_PATHS = [
   { name: "노원구",   risk: 62, cx: 345, cy: 62,  d: "M308,22 L382,20 L410,52 L395,92 L365,112 L335,112 L306,102 L302,78 Z" },
   { name: "도봉구",   risk: 45, cx: 272, cy: 60,  d: "M245,22 L308,22 L302,78 L306,102 L278,106 L252,88 L242,62 Z" },
   { name: "강북구",   risk: 57, cx: 222, cy: 90,  d: "M182,50 L245,22 L242,62 L252,88 L278,106 L262,128 L232,133 L208,116 L188,92 Z" },
@@ -67,10 +67,10 @@ const SEOUL_PATHS: { name: string; risk: number; cx: number; cy: number; small?:
 ];
 
 const AGE_GROUPS = [
-  { id: "youth" as AgeGroup, label: "청소년", sub: "18세 미만", pastel: "#E8F5E9", accent: "#4CAF50" },
-  { id: "adult" as AgeGroup, label: "성인", sub: "18-59세", pastel: "#FFFDE7", accent: "#F9A825" },
-  { id: "senior" as AgeGroup, label: "고령자", sub: "60-74세", pastel: "#FFF3E0", accent: "#FB8C00" },
-  { id: "elderly" as AgeGroup, label: "노인", sub: "75세 이상", pastel: "#FFEBEE", accent: "#E53935" },
+  { id: "youth", label: "청소년", sub: "18세 미만", pastel: "#E8F5E9", accent: "#4CAF50" },
+  { id: "adult", label: "성인", sub: "18-59세", pastel: "#FFFDE7", accent: "#F9A825" },
+  { id: "senior", label: "고령자", sub: "60-74세", pastel: "#FFF3E0", accent: "#FB8C00" },
+  { id: "elderly", label: "노인", sub: "75세 이상", pastel: "#FFEBEE", accent: "#E53935" },
 ];
 
 const LOCATIONS = ["종로구", "중구", "용산구", "성동구", "광진구", "동대문구", "마포구", "강남구", "서초구", "송파구"];
@@ -90,7 +90,7 @@ const RISK_FACTORS = [
 
 // ─── Circular Gauge ──────────────────────────────────────────────────────────
 
-function RiskGauge({ score }: { score: number }) {
+function RiskGauge({ score }) {
   const r = 72;
   const cx = 90;
   const cy = 90;
@@ -132,7 +132,7 @@ function RiskGauge({ score }: { score: number }) {
 
 // ─── Seoul District Map ──────────────────────────────────────────────────────
 
-function SeoulMap({ onSelect, selected }: { onSelect: (name: string, risk: number) => void; selected: string }) {
+function SeoulMap({ onSelect, selected }) {
   return (
     <div className="relative w-full" style={{ paddingBottom: "96%" }}>
       <svg viewBox="0 0 470 452" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -196,8 +196,8 @@ function RiskLegend() {
 
 // ─── Bottom Nav ───────────────────────────────────────────────────────────────
 
-function BottomNav({ current, onNav }: { current: Screen; onNav: (s: Screen) => void }) {
-  const tabs: { id: Screen; icon: typeof Home; label: string }[] = [
+function BottomNav({ current, onNav }) {
+  const tabs = [
     { id: "home", icon: Home, label: "홈" },
     { id: "analysis", icon: BarChart2, label: "분석" },
     { id: "shelter", icon: Map, label: "쉼터" },
@@ -223,8 +223,8 @@ function BottomNav({ current, onNav }: { current: Screen; onNav: (s: Screen) => 
 
 // ─── Screens ──────────────────────────────────────────────────────────────────
 
-function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
-  const [age, setAge] = useState<AgeGroup | null>(null);
+function OnboardingScreen({ onComplete }) {
+  const [age, setAge] = useState(null);
   const [location, setLocation] = useState("");
   const [locOpen, setLocOpen] = useState(false);
 
@@ -345,7 +345,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
 // ─── Home Dashboard ───────────────────────────────────────────────────────────
 
-function HomeScreen({ onNav }: { onNav: (s: Screen) => void }) {
+function HomeScreen({ onNav }) {
   const score = 91;
   const [selectedDistrict, setSelectedDistrict] = useState("종로구");
 
@@ -622,7 +622,7 @@ function ShelterMap() {
   );
 }
 
-function ShelterScreen({ onNav }: { onNav: (s: Screen) => void }) {
+function ShelterScreen({ onNav }) {
   const [selected, setSelected] = useState(0);
 
   return (
@@ -707,7 +707,7 @@ function ShelterScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── Navigation Screen ────────────────────────────────────────────────────────
 
-function NavScreen({ onNav }: { onNav: (s: Screen) => void }) {
+function NavScreen({ onNav }) {
   const [step, setStep] = useState(0);
   const steps = [
     { dir: "직진", icon: "↑", detail: "50m — 창신길 따라 직진" },
@@ -937,8 +937,8 @@ function GuideScreen() {
 const HOME_SCORE = 91;
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("onboarding");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [screen, setScreen] = useState("onboarding");
+  const scrollRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) {
