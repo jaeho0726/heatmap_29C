@@ -37,7 +37,7 @@ const RISK_LABEL = (score: number) => {
 };
 
 // Seoul district SVG paths (approximate geographic boundaries, viewBox 0 0 460 440)
-const SEOUL_PATHS: { name: string; risk: number; cx: number; cy: number; small?: boolean; d: string }[] = [
+const SEOUL_PATHS = [
   { name: "노원구",   risk: 62, cx: 345, cy: 62,  d: "M308,22 L382,20 L410,52 L395,92 L365,112 L335,112 L306,102 L302,78 Z" },
   { name: "도봉구",   risk: 45, cx: 272, cy: 60,  d: "M245,22 L308,22 L302,78 L306,102 L278,106 L252,88 L242,62 Z" },
   { name: "강북구",   risk: 57, cx: 222, cy: 90,  d: "M182,50 L245,22 L242,62 L252,88 L278,106 L262,128 L232,133 L208,116 L188,92 Z" },
@@ -132,7 +132,13 @@ function RiskGauge({ score }: { score: number }) {
 
 // ─── Seoul District Map ──────────────────────────────────────────────────────
 
-function SeoulMap({ onSelect, selected }: { onSelect: (name: string, risk: number) => void; selected: string }) {
+function SeoulMap({
+  onSelect,
+  selected,
+}: {
+  onSelect: (name: string, risk: number) => void;
+  selected: string;
+}) {
   return (
     <div className="relative w-full" style={{ paddingBottom: "96%" }}>
       <svg viewBox="0 0 470 452" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -196,14 +202,20 @@ function RiskLegend() {
 
 // ─── Bottom Nav ───────────────────────────────────────────────────────────────
 
-function BottomNav({ current, onNav }: { current: Screen; onNav: (s: Screen) => void }) {
+function BottomNav({
+  current,
+  onNav,
+}: {
+  current: Screen;
+  onNav: (s: Screen) => void;
+}) {
   const tabs: { id: Screen; icon: typeof Home; label: string }[] = [
-    { id: "home", icon: Home, label: "홈" },
-    { id: "analysis", icon: BarChart2, label: "분석" },
-    { id: "shelter", icon: Map, label: "쉼터" },
-    { id: "nav", icon: Compass, label: "길찾기" },
-    { id: "guide", icon: BookOpen, label: "AI 가이드" },
-  ];
+  { id: "home", icon: Home, label: "홈" },
+  { id: "analysis", icon: BarChart2, label: "분석" },
+  { id: "shelter", icon: Map, label: "쉼터" },
+  { id: "nav", icon: Compass, label: "길찾기" },
+  { id: "guide", icon: BookOpen, label: "AI 가이드" },
+];
   return (
     <nav className="flex items-center justify-around border-t border-gray-100 bg-white px-2 pt-2 pb-safe">
       {tabs.map(({ id, icon: Icon, label }) => (
@@ -628,7 +640,17 @@ function ShelterScreen({ onNav }: { onNav: (s: Screen) => void }) {
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
-        <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>무더위쉼터 안내</h1>
+        <h1
+  className="text-xl font-black mb-1"
+  style={{
+    color: "white",
+    fontFamily: "'Noto Sans KR', sans-serif",
+    fontWeight: 900,
+    textAlign: "left",
+  }}
+>
+  무더위쉼터 안내
+</h1>
         <p className="text-sm" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "'Noto Sans KR', sans-serif" }}>서울시 종로구 인근 쉼터 3개소 검색됨</p>
       </div>
 
