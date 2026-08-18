@@ -95,6 +95,11 @@ SEOUL_HEATMAP_CACHE = {
     "created_at": None,
     "data": None
 }
+SEOUL_FORECAST_HEATMAP_CACHE = {
+    "created_at": None,
+    "age": None,
+    "data": None
+}
 
 
 def get_district_from_kakao(lat: float, lon: float):
@@ -766,6 +771,131 @@ def seoul_heatmap(age: int = 35):
 
     SEOUL_HEATMAP_CACHE["created_at"] = now
     SEOUL_HEATMAP_CACHE["data"] = result
+
+    return result
+
+
+@app.get("/api/seoul-forecast-heatmap")
+def seoul_forecast_heatmap(age: int = 35, limit: int = 10):
+    now = datetime.now()
+    limit = max(1, min(limit, 12))
+
+    if (
+        SEOUL_FORECAST_HEATMAP_CACHE["created_at"]
+        and SEOUL_FORECAST_HEATMAP_CACHE["data"]
+        and SEOUL_FORECAST_HEATMAP_CACHE["age"] == age
+        and now - SEOUL_FORECAST_HEATMAP_CACHE["created_at"] < timedelta(minutes=30)
+    ):
+        return SEOUL_FORECAST_HEATMAP_CACHE["data"]
+
+    time_map = {}
+
+    for point in SEOUL_DISTRICT_POINTS:
+        green_ratio = get_green_ratio(point["name"])
+
+        try:
+            forecast_items = get_forecast_weather_data(
+                point["lat"],
+                point["lon"],
+                limit=limit
+            )
+        except Exception:
+            forecast_items = []
+
+        if not forecast_items:
+            try:
+                current_weather = get_weather_data(
+                    point["lat"],
+                    point["lon"]
+                )
+            except Exception:
+                current_weather = {}
+
+            current_temperature = current_weather.get("temperature", 30)
+            current_humidity = current_weather.get("humidity", 70)
+            current_wind_speed = current_weather.get("wind_speed", 1.5)
+            current_rainfall = current_weather.get("rainfall", 0)
+
+            forecast_items = [
+                {
+                    "date": now.strftime("%Y%m%d"),
+                    "time": f"{(now.hour + index * 2) % 24:02d}00",
+                    "temperature": current_temperature + delta,
+                    "humidity": current_humidity,
+                    "wind_speed": current_wind_speed,
+                    "rainfall": current_rainfall,
+                    "max_temperature": current_temperature + max(delta, 0)
+                }
+                for index, delta in enumerate([-2, 0, 2, 3, 4, 3, 1, 0, -1, -2][:limit])
+            ]
+
+        for item in forecast_items[:limit]:
+            predicted_patient_count = predict_patient_count(
+                item["temperature"],
+                item["max_temperature"],
+                item["rainfall"],
+                item["wind_speed"],
+                item["humidity"],
+                green_ratio
+            )
+
+            score = calculate_model_risk_score(
+                age,
+                predicted_patient_count
+            )
+
+            time_key = f"{item['date']}{item['time']}"
+
+            if time_key not in time_map:
+                time_map[time_key] = {
+                    "date": item["date"],
+                    "time": item["time"],
+                    "label": f"{int(item['time'][:2])}시",
+                    "districts": []
+                }
+
+            time_map[time_key]["districts"].append({
+                "name": point["name"],
+                "lat": point["lat"],
+                "lon": point["lon"],
+                "temperature": item["temperature"],
+                "humidity": item["humidity"],
+                "wind_speed": item["wind_speed"],
+                "rainfall": item["rainfall"],
+                "max_temperature": item["max_temperature"],
+                "green_ratio": green_ratio,
+                "age_group": get_age_group(age),
+                "age_factor": get_age_factor(age),
+                "predicted_patient_count": predicted_patient_count,
+                "score": score,
+                "level": get_risk_level(score)
+            })
+
+    forecasts = [
+        item for _, item in sorted(time_map.items())
+        if item["districts"]
+    ][:limit]
+
+    result = {
+        "age": age,
+        "times": [
+            {
+                "date": item["date"],
+                "time": item["time"],
+                "label": item["label"],
+                "average_score": round(
+                    sum(district["score"] for district in item["districts"])
+                    / len(item["districts"])
+                )
+            }
+            for item in forecasts
+        ],
+        "forecasts": forecasts
+    }
+
+    SEOUL_FORECAST_HEATMAP_CACHE["created_at"] = now
+    SEOUL_FORECAST_HEATMAP_CACHE["age"] = age
+    SEOUL_FORECAST_HEATMAP_CACHE["data"] = result
 
     return result
 

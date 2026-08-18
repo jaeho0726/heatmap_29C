@@ -5,12 +5,12 @@ import {
   ArrowLeft, Search, Star, CheckCircle, Info,
   Home, BarChart2, Map, BookOpen,
   Users, TreePine, Building, Flame, Moon,
-  RefreshCw, Shield, Plus, Minus
+  RefreshCw, Shield
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
+type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide" | "heatmap";
 type AgeGroup = "0-9" | "10-19" | "20-29" | "30-39" | "40-49" | "50-59" | "60-69" | "70-79" | "80+";
 
 type RiskApiResponse = {
@@ -96,6 +96,26 @@ type ForecastRiskData = {
   level: string;
 };
 
+type SeoulForecastHeatmapTime = {
+  date: string;
+  time: string;
+  label: string;
+  average_score: number;
+};
+
+type SeoulForecastHeatmapFrame = {
+  date: string;
+  time: string;
+  label: string;
+  districts: DistrictHeatData[];
+};
+
+type SeoulForecastHeatmapResponse = {
+  age: number;
+  times: SeoulForecastHeatmapTime[];
+  forecasts: SeoulForecastHeatmapFrame[];
+};
+
 type SelectedShelter = {
   id: number;
   name: string;
@@ -131,10 +151,24 @@ const RISK_LABEL = (score: number) => {
   return "매우 위험";
 };
 
+function keepLastWordsTogether(text: string) {
+  return text.replace("매우 높음", "매우\u00A0높음");
+}
+
 const DEMO_JONGNO_LOCATION = {
   lat: 37.5729,
   lon: 126.9794,
 };
+
+const DEMO_RISK_SCORE = 82;
+const DEMO_DATE_LABEL = "2026.08.04 화요일";
+const DEMO_FEELS_LIKE_TEMPERATURE = 37.0;
+const DEMO_WEATHER_STEPS = [
+  { temperature: 35.8, humidity: 64, wind_speed: 1.1 },
+  { temperature: 36.6, humidity: 61, wind_speed: 1.0 },
+  { temperature: 37.4, humidity: 58, wind_speed: 0.9 },
+  { temperature: 36.9, humidity: 60, wind_speed: 1.2 },
+];
 
 const SEOUL_GEOJSON_URLS = [
   "/seoul_municipalities_geo_simple.json",
@@ -194,6 +228,16 @@ async function fetchForecastRisk(age: number, lat: number, lon: number, district
 
   const data = await response.json();
   return data.forecasts ?? [];
+}
+
+async function fetchSeoulForecastHeatmap(age: number): Promise<SeoulForecastHeatmapResponse> {
+  const response = await fetch(`http://127.0.0.1:8000/api/seoul-forecast-heatmap?age=${age}&limit=10`);
+
+  if (!response.ok) {
+    throw new Error("서울 시간대별 폭염 지도 조회 실패");
+  }
+
+  return await response.json();
 }
 
 function ageGroupToAge(ageGroup: AgeGroup) {
@@ -283,13 +327,7 @@ function clampPercent(value: number) {
 }
 
 function getTodayLabel() {
-  const today = new Date();
-  const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
-  return `${year}.${month}.${day} ${weekdays[today.getDay()]}요일`;
+  return DEMO_DATE_LABEL;
 }
 
 function getHeatAlertLabel(score: number, feelsLikeTemperature: number) {
@@ -628,7 +666,6 @@ function BottomNav({
 }) {
   const tabs: { id: Screen; icon: typeof Home; label: string }[] = [
   { id: "home", icon: Home, label: "홈" },
-  { id: "analysis", icon: BarChart2, label: "분석" },
   { id: "shelter", icon: Map, label: "쉼터" },
   { id: "guide", icon: BookOpen, label: "AI 가이드" },
 ];
@@ -800,13 +837,14 @@ function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) 
 // ─── Home Dashboard ───────────────────────────────────────────────────────────
 
 function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData: RiskApiResponse | null }) {
-  const score = riskData?.risk.score ?? 91;
+  const score = DEMO_RISK_SCORE;
   const district = riskData?.location.district ?? "종로구";
-  const temperature = riskData?.weather.temperature ?? 38;
-  const humidity = riskData?.weather.humidity ?? 72;
-  const windSpeed = riskData?.weather.wind_speed ?? 1.2;
+  const demoWeather = DEMO_WEATHER_STEPS[0];
+  const temperature = demoWeather.temperature;
+  const humidity = demoWeather.humidity;
+  const windSpeed = demoWeather.wind_speed;
   const greenRatio = riskData?.weather.green_ratio ?? 0.585919;
-  const feelsLikeTemperature = calculateHeatIndex(temperature, humidity);
+  const feelsLikeTemperature = DEMO_FEELS_LIKE_TEMPERATURE;
   const todayLabel = getTodayLabel();
   const heatAlertLabel = getHeatAlertLabel(score, feelsLikeTemperature);
   const ageFactorPercent = Math.round((riskData?.risk.age_factor ?? 0.4) * 100);
@@ -814,10 +852,10 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
   const riskFactors = [
     {
       label: "체감온도",
-      value: clampPercent((feelsLikeTemperature - 24) * 6),
+      value: clampPercent(((feelsLikeTemperature - 10) / 30) * 100),
       icon: Thermometer,
       color: feelsLikeTemperature >= 35 ? "#E53935" : feelsLikeTemperature >= 32 ? "#FB8C00" : "#FBC02D",
-      detail: `${feelsLikeTemperature.toFixed(1)}°C`,
+      detail: `약 ${Math.round(feelsLikeTemperature)}°C`,
     },
     {
       label: "습도",
@@ -825,6 +863,13 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
       icon: Droplets,
       color: humidity >= 80 ? "#E53935" : humidity >= 65 ? "#FB8C00" : "#4CAF50",
       detail: `${Math.round(humidity)}%`,
+    },
+    {
+      label: "풍속",
+      value: clampPercent(((5 - windSpeed) / 5) * 100),
+      icon: Wind,
+      color: windSpeed <= 1 ? "#E53935" : windSpeed <= 2.5 ? "#FB8C00" : "#4CAF50",
+      detail: `${windSpeed.toFixed(1)}m/s`,
     },
     {
       label: "연령 취약도",
@@ -842,10 +887,57 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
     },
   ];
   const [selectedDistrict, setSelectedDistrict] = useState(district);
-  const [heatmapData, setHeatmapData] = useState<DistrictHeatData[]>([]);
+  const [forecastFrames, setForecastFrames] = useState<SeoulForecastHeatmapFrame[]>([]);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
-  const [mapZoom, setMapZoom] = useState(1);
+  const [selectedTimeIndex, setSelectedTimeIndex] = useState(0);
+  const fallbackFrame: SeoulForecastHeatmapFrame = {
+    date: "",
+    time: "",
+    label: "현재",
+    districts: SEOUL_PATHS.map((item) => ({
+      name: item.name,
+      lat: 37.5665,
+      lon: 126.978,
+      temperature,
+      humidity,
+      wind_speed: riskData?.weather.wind_speed ?? 1.5,
+      rainfall: riskData?.weather.rainfall ?? 0,
+      green_ratio: greenRatio,
+      predicted_patient_count: 0,
+      score: item.risk,
+      level: RISK_LABEL(item.risk),
+    })),
+  };
+  const timeSteps = [
+    { label: "오후 2시", frameIndex: 0 },
+    { label: "오후 3시", frameIndex: 1 },
+    { label: "오후 4시", frameIndex: 2 },
+    { label: "오후 5시", frameIndex: 3 },
+  ];
+  const selectedStep = timeSteps[selectedTimeIndex] ?? timeSteps[0];
+  const selectedFrame = forecastFrames[selectedStep.frameIndex] ?? forecastFrames[0] ?? fallbackFrame;
+  const selectedDemoWeather = DEMO_WEATHER_STEPS[selectedTimeIndex] ?? DEMO_WEATHER_STEPS[0];
+  const heatmapData = selectedFrame.districts.map((item) => ({
+    ...item,
+    temperature: selectedDemoWeather.temperature,
+    humidity: selectedDemoWeather.humidity,
+    wind_speed: selectedDemoWeather.wind_speed,
+    score: clampPercent(DEMO_RISK_SCORE + [0, 4, 8, 5][selectedTimeIndex] + (item.name === "종로구" ? 0 : -6)),
+    level: RISK_LABEL(clampPercent(DEMO_RISK_SCORE + [0, 4, 8, 5][selectedTimeIndex] + (item.name === "종로구" ? 0 : -6))),
+  }));
   const selectedHeatData = heatmapData.find((item) => item.name === selectedDistrict);
+  const selectedHeatScore = selectedHeatData?.score ?? SEOUL_PATHS.find(d => d.name === selectedDistrict)?.risk ?? score;
+  const timeBars = timeSteps.map((step, index) => {
+    const frame = forecastFrames[step.frameIndex];
+    const fallbackDelta = [0, 5, 9, 12][index] ?? 0;
+
+    return {
+      label: step.label,
+      score: frame
+        ? Math.round(frame.districts.reduce((sum, item) => sum + item.score, 0) / frame.districts.length)
+        : clampPercent(score + fallbackDelta),
+    };
+  });
 
   useEffect(() => {
     setSelectedDistrict(district);
@@ -856,10 +948,11 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
       setHeatmapLoading(true);
 
       try {
-        const data = await fetchSeoulHeatmap(riskData?.age ?? 35);
-        setHeatmapData(data);
+        const data = await fetchSeoulForecastHeatmap(riskData?.age ?? 35);
+        setForecastFrames(data.forecasts ?? []);
+        setSelectedTimeIndex(0);
       } catch (error) {
-        console.error("서울 폭염 현황 조회 실패:", error);
+        console.error("서울 시간대별 폭염 지도 조회 실패:", error);
       } finally {
         setHeatmapLoading(false);
       }
@@ -882,29 +975,13 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
             <span>방금 전 업데이트</span>
           </div>
         </div>
-        <div className="flex items-end justify-between gap-4 mt-4">
+        <div className="flex items-end justify-between gap-4 mt-5">
           <div className="min-w-0">
-            <div className="flex items-end gap-3">
-              <span className="text-6xl font-black text-white tracking-normal" style={{ fontFamily: "Inter, sans-serif", lineHeight: 0.9 }}>{Math.round(temperature)}°C</span>
-              <div className="mb-1.5">
-                <div className="text-sm text-white font-semibold" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>체감</div>
-                <div className="text-2xl text-white font-black" style={{ fontFamily: "Inter, sans-serif", lineHeight: 1 }}>{Math.round(feelsLikeTemperature)}°C</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 mt-2">
-              <div className="flex items-center gap-1">
-                <Droplets size={13} color="white" />
-                <span className="text-sm font-medium text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>습도 {Math.round(humidity)}%</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Wind size={13} color="white" />
-                <span className="text-sm font-medium text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>풍속 {windSpeed}m/s</span>
-              </div>
-            </div>
+            <span className="text-6xl font-black text-white tracking-normal" style={{ fontFamily: "Inter, sans-serif", lineHeight: 0.9 }}>{Math.round(temperature)}°C</span>
           </div>
-          <div className="text-right flex-shrink-0 max-w-[128px]">
-            <div className="text-base font-black text-white leading-snug" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>{heatAlertLabel}</div>
-            <div className="text-xs mt-1 leading-snug" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Sans KR', sans-serif" }}>{todayLabel}</div>
+          <div className="text-right flex-shrink-0 max-w-[190px]">
+            <div className="text-lg font-black text-white leading-tight" style={{ fontFamily: "'Noto Sans KR', sans-serif", wordBreak: "keep-all" }}>{keepLastWordsTogether(heatAlertLabel)}</div>
+            <div className="text-sm mt-2 leading-snug font-bold" style={{ color: "rgba(255,255,255,0.9)", fontFamily: "'Noto Sans KR', sans-serif" }}>{todayLabel}</div>
           </div>
         </div>
       </div>
@@ -956,31 +1033,52 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
         </div>
 
         {/* Seoul Heatmap */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border" style={{ borderColor: "#F3F4F6" }}>
+        <div className="w-full bg-white rounded-2xl p-4 shadow-sm border text-left" style={{ borderColor: "#F3F4F6" }}>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>서울 폭염 현황 지도</h2>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setMapZoom((value) => Math.max(1, Number((value - 0.18).toFixed(2))))}
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: "#F3F4F6", color: "#183153" }}
-                aria-label="지도 축소"
-              >
-                <Minus size={15} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setMapZoom((value) => Math.min(1.72, Number((value + 0.18).toFixed(2))))}
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: "#183153", color: "white" }}
-                aria-label="지도 확대"
-              >
-                <Plus size={15} />
-              </button>
+            <div>
+              <h2 className="text-base font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>서울 폭염 현황 지도</h2>
+              <p className="text-xs mt-0.5" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>
+                시간대를 움직여 자치구별 위험도 변화를 확인하세요
+              </p>
             </div>
           </div>
-          <SeoulMap selected={selectedDistrict} onSelect={(name) => setSelectedDistrict(name)} heatmapData={heatmapData} zoom={mapZoom} />
+          <SeoulMap selected={selectedDistrict} onSelect={(name) => setSelectedDistrict(name)} heatmapData={heatmapData} zoom={1} />
+          <div className="mt-3">
+            <div className="relative h-8 rounded-xl overflow-hidden border" style={{ background: "#F5F7FA", borderColor: "#E5E7EB" }}>
+              <div
+                className="absolute top-0 bottom-0 rounded-xl transition-all"
+                style={{
+                  left: `${selectedTimeIndex * 25}%`,
+                  width: "25%",
+                  background: "#EFF4FB",
+                  border: "1.5px solid #183153",
+                }}
+              />
+              <div className="relative grid grid-cols-4 h-full">
+                {timeBars.map((item, index) => (
+                  <button
+                    key={`${item.label}-${index}`}
+                    type="button"
+                    onClick={() => setSelectedTimeIndex(index)}
+                    className="h-full flex items-center justify-center px-1"
+                    style={{ borderLeft: index === 0 ? "none" : "1px solid rgba(229,231,235,0.9)" }}
+                  >
+                    <span
+                      className="text-[10px] font-black whitespace-nowrap leading-none"
+                      style={{ color: selectedTimeIndex === index ? "#183153" : "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}
+                    >
+                      {item.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-1.5 h-1.5 rounded-full overflow-hidden grid grid-cols-4" style={{ background: "#E5EAF2" }}>
+              {timeBars.map((item, index) => (
+                <div key={`${item.label}-bar-${index}`} style={{ background: selectedTimeIndex === index ? "#183153" : "#B9C4D4" }} />
+              ))}
+            </div>
+          </div>
           <div className="mt-3">
             <RiskLegend />
           </div>
@@ -1003,11 +1101,11 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
                 </div>
               </div>
               <span className="text-sm font-bold px-2.5 py-0.5 rounded-full" style={{
-                background: RISK_BG(selectedHeatData?.score ?? SEOUL_PATHS.find(d => d.name === selectedDistrict)?.risk ?? 50),
-                color: RISK_COLOR(selectedHeatData?.score ?? SEOUL_PATHS.find(d => d.name === selectedDistrict)?.risk ?? 50),
+                background: RISK_BG(selectedHeatScore),
+                color: RISK_COLOR(selectedHeatScore),
                 fontFamily: "'Noto Sans KR', sans-serif"
               }}>
-                {selectedHeatData?.score ?? SEOUL_PATHS.find(d => d.name === selectedDistrict)?.risk ?? 0}점 · {RISK_LABEL(selectedHeatData?.score ?? SEOUL_PATHS.find(d => d.name === selectedDistrict)?.risk ?? 50)}
+                {selectedHeatScore}점 · {RISK_LABEL(selectedHeatScore)}
               </span>
             </div>
           )}
@@ -1028,17 +1126,193 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
   );
 }
 
+// ─── Seoul Heatmap Detail ────────────────────────────────────────────────────
+
+function HeatmapScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData: RiskApiResponse | null }) {
+  const district = riskData?.location.district ?? "종로구";
+  const score = DEMO_RISK_SCORE;
+  const [selectedDistrict, setSelectedDistrict] = useState(district);
+  const [forecastFrames, setForecastFrames] = useState<SeoulForecastHeatmapFrame[]>([]);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [selectedTimeIndex, setSelectedTimeIndex] = useState(0);
+  const fallbackFrame: SeoulForecastHeatmapFrame = {
+    date: "",
+    time: "",
+    label: "현재",
+    districts: SEOUL_PATHS.map((item) => ({
+      name: item.name,
+      lat: 37.5665,
+      lon: 126.978,
+      temperature: riskData?.weather.temperature ?? 30,
+      humidity: riskData?.weather.humidity ?? 70,
+      wind_speed: riskData?.weather.wind_speed ?? 1.5,
+      rainfall: riskData?.weather.rainfall ?? 0,
+      green_ratio: riskData?.weather.green_ratio ?? 0.585919,
+      predicted_patient_count: 0,
+      score: item.risk,
+      level: RISK_LABEL(item.risk),
+    })),
+  };
+  const selectedFrame = forecastFrames[selectedTimeIndex] ?? forecastFrames[0] ?? fallbackFrame;
+  const heatmapData = selectedFrame.districts;
+  const selectedHeatData = heatmapData.find((item) => item.name === selectedDistrict);
+  const selectedScore = selectedHeatData?.score ?? SEOUL_PATHS.find((item) => item.name === selectedDistrict)?.risk ?? score;
+  const forecastBars = forecastFrames.length > 0
+    ? forecastFrames.map((frame) => ({
+        score: Math.round(frame.districts.reduce((sum, item) => sum + item.score, 0) / frame.districts.length),
+        label: frame.label,
+      }))
+    : [-8, -3, 0, 5, 9, 12, 7, 3, -2, -6].map((delta, index) => ({
+        score: clampPercent(score + delta),
+        label: `${(6 + index * 2) % 24}시`,
+      }));
+  const selectedTime = forecastBars[selectedTimeIndex] ?? forecastBars[0];
+
+  useEffect(() => {
+    setSelectedDistrict(district);
+  }, [district]);
+
+  useEffect(() => {
+    const loadForecastHeatmap = async () => {
+      setHeatmapLoading(true);
+
+      try {
+        const data = await fetchSeoulForecastHeatmap(riskData?.age ?? 35);
+        setForecastFrames(data.forecasts ?? []);
+        setSelectedTimeIndex(0);
+      } catch (error) {
+        console.error("서울 시간대별 폭염 지도 조회 실패:", error);
+      } finally {
+        setHeatmapLoading(false);
+      }
+    };
+
+    loadForecastHeatmap();
+  }, [riskData?.age]);
+
+  return (
+    <div className="flex flex-col bg-gray-50 pb-4">
+      <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
+        <button
+          type="button"
+          onClick={() => onNav("home")}
+          className="w-9 h-9 rounded-full flex items-center justify-center mb-4"
+          style={{ background: "rgba(255,255,255,0.12)", color: "white" }}
+          aria-label="뒤로가기"
+        >
+          <ArrowLeft size={19} />
+        </button>
+        <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>서울 폭염 현황 지도</h1>
+        <p className="text-sm" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "'Noto Sans KR', sans-serif" }}>
+          자치구별 현재 위험도와 시간대별 변화를 확인하세요
+        </p>
+      </div>
+
+      <div className="px-4 py-4 space-y-4">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border" style={{ borderColor: "#F3F4F6" }}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-base font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>{selectedDistrict}</h2>
+              <p className="text-xs mt-0.5" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>
+                지도를 눌러 자치구를 선택하세요
+              </p>
+            </div>
+            <span className="text-sm font-black px-2.5 py-1 rounded-full" style={{
+              background: RISK_BG(selectedScore),
+              color: RISK_COLOR(selectedScore),
+              fontFamily: "Inter, sans-serif",
+            }}>
+              {selectedScore}점
+            </span>
+          </div>
+          <SeoulMap selected={selectedDistrict} onSelect={setSelectedDistrict} heatmapData={heatmapData} zoom={1.08} />
+          <div className="mt-3">
+            <RiskLegend />
+          </div>
+          {heatmapLoading && (
+            <p className="mt-2 text-xs" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>
+              서울시 자치구별 폭염 정보를 불러오는 중입니다.
+            </p>
+          )}
+          {selectedHeatData && (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {[
+                { label: "기온", value: `${Math.round(selectedHeatData.temperature)}°C` },
+                { label: "습도", value: `${Math.round(selectedHeatData.humidity)}%` },
+                { label: selectedTime ? selectedTime.label : "위험", value: RISK_LABEL(selectedScore) },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl px-3 py-2" style={{ background: "#F5F7FA" }}>
+                  <div className="text-xs" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>{item.label}</div>
+                  <div className="text-sm font-black mt-0.5" style={{ color: "#183153", fontFamily: item.label === "위험" ? "'Noto Sans KR', sans-serif" : "Inter, sans-serif" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm border" style={{ borderColor: "#F3F4F6" }}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>시간대별 위험도 변화</h2>
+            {heatmapLoading && (
+              <span className="text-xs" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>예보 불러오는 중</span>
+            )}
+          </div>
+          <div className="flex items-end gap-2 h-36">
+            {forecastBars.map((item, index) => (
+              <button
+                key={`${item.label}-${index}`}
+                type="button"
+                onClick={() => setSelectedTimeIndex(index)}
+                className="flex-1 flex flex-col items-center gap-1.5"
+              >
+                <div
+                  className="relative w-full rounded-full overflow-hidden transition-all"
+                  style={{
+                    height: selectedTimeIndex === index ? 112 : 104,
+                    background: selectedTimeIndex === index ? RISK_BG(item.score) : "#F3F4F6",
+                    outline: selectedTimeIndex === index ? `2px solid ${RISK_COLOR(item.score)}` : "none",
+                    outlineOffset: 2,
+                  }}
+                >
+                  <div
+                    className="absolute bottom-0 left-0 right-0 rounded-full transition-all"
+                    style={{ height: `${clampPercent(item.score)}%`, background: RISK_COLOR(item.score) }}
+                  />
+                </div>
+                <span
+                  className="text-[10px] font-bold"
+                  style={{ color: selectedTimeIndex === index ? RISK_COLOR(item.score) : "#6B7280", fontFamily: "Inter, sans-serif" }}
+                >
+                  {item.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-between rounded-xl px-3 py-2" style={{ background: "#F5F7FA" }}>
+            <span className="text-xs" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>
+              {selectedTime ? `${selectedTime.label} 예측 기준` : "선택 구역 기준"}
+            </span>
+            <span className="text-sm font-bold" style={{ color: RISK_COLOR(selectedScore), fontFamily: "'Noto Sans KR', sans-serif" }}>
+              {selectedDistrict} {selectedScore}점 · {RISK_LABEL(selectedScore)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Risk Analysis ─────────────────────────────────────────────────────────────
 
 function AnalysisScreen({ riskData }: { riskData: RiskApiResponse | null }) {
   const [forecastData, setForecastData] = useState<ForecastRiskData[]>([]);
   const [forecastLoading, setForecastLoading] = useState(false);
-  const score = riskData?.risk.score ?? 50;
+  const score = DEMO_RISK_SCORE;
   const district = riskData?.location.district ?? "종로구";
-  const temperature = riskData?.weather.temperature ?? 30;
-  const humidity = riskData?.weather.humidity ?? 60;
+  const temperature = DEMO_WEATHER_STEPS[0].temperature;
+  const humidity = DEMO_WEATHER_STEPS[0].humidity;
   const greenRatio = riskData?.weather.green_ratio ?? 0.585919;
-  const feelsLikeTemperature = calculateHeatIndex(temperature, humidity);
+  const feelsLikeTemperature = DEMO_FEELS_LIKE_TEMPERATURE;
   const ageFactorPercent = Math.round((riskData?.risk.age_factor ?? 0.4) * 100);
   const greenRatioPercent = greenRatio <= 1 ? greenRatio * 100 : greenRatio;
   const level = RISK_LABEL(score);
@@ -1048,23 +1322,17 @@ function AnalysisScreen({ riskData }: { riskData: RiskApiResponse | null }) {
     : score >= 50
       ? "장시간 야외 활동을 피하고 수분을 자주 보충하세요."
       : "현재 위험도는 낮지만 더위 노출 시간이 길어지지 않도록 주의하세요.";
-  const fallbackForecastValues = [-10, -4, 0, 6, 12, 16, 10, 4, 0, -5, -8, -12].map((delta) => clampPercent(score + delta));
-  const forecastBars = forecastData.length > 0
-    ? forecastData.map((item) => ({
-        score: item.score,
-        label: `${Number(item.time.slice(0, 2))}시`,
-      }))
-    : fallbackForecastValues.map((value, index) => ({
-        score: value,
-        label: `${(6 + index * 2) % 24}시`,
-      }));
+  const forecastBars = [0, 4, 8, 5, 1, -3].map((delta, index) => ({
+    score: clampPercent(DEMO_RISK_SCORE + delta),
+    label: `${14 + index}시`,
+  }));
   const contributions = [
     {
       label: "체감온도",
-      pct: clampPercent((feelsLikeTemperature - 24) * 6),
+      pct: clampPercent(((feelsLikeTemperature - 10) / 30) * 100),
       icon: Thermometer,
       color: feelsLikeTemperature >= 35 ? "#E53935" : feelsLikeTemperature >= 32 ? "#FB8C00" : "#FBC02D",
-      detail: `${feelsLikeTemperature.toFixed(1)}°C · 현재 기온 ${Math.round(temperature)}°C`,
+      detail: `약 ${Math.round(feelsLikeTemperature)}°C · 현재 기온 ${temperature.toFixed(1)}°C`,
     },
     {
       label: "습도",
@@ -1149,7 +1417,7 @@ function AnalysisScreen({ riskData }: { riskData: RiskApiResponse | null }) {
             <h2 className="text-base font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>AI 분석 설명</h2>
           </div>
           <p className="text-sm leading-relaxed" style={{ color: "#374151", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            현재 {district}의 체감온도는 <strong>{feelsLikeTemperature.toFixed(1)}°C</strong>, 습도는 <strong>{Math.round(humidity)}%</strong>입니다. 선택한 연령대의 취약도 가중치는 <strong>{ageFactorPercent}%</strong>이며, 녹지율은 <strong>{getGreenRatioLabel(greenRatio)}</strong>로 반영되었습니다.
+            현재 {district}의 체감온도는 <strong>약 {Math.round(feelsLikeTemperature)}°C</strong>, 기온은 <strong>{temperature.toFixed(1)}°C</strong>입니다. 선택한 연령대의 취약도 가중치는 <strong>{ageFactorPercent}%</strong>이며, 녹지율은 <strong>{getGreenRatioLabel(greenRatio)}</strong>로 반영되었습니다.
           </p>
         </div>
 
@@ -1531,26 +1799,42 @@ function NavScreen({ onNav, selectedShelter }: { onNav: (s: Screen) => void; sel
 // ─── AI Guide ─────────────────────────────────────────────────────────────────
 
 function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
-  const score = riskData?.risk.score ?? 50;
+  const score = DEMO_RISK_SCORE;
   const district = riskData?.location.district ?? "종로구";
   const age = riskData?.age ?? 35;
-  const ageGroup = riskData?.risk.age_group ?? getAgeGroup(age);
+  const ageLabel = age >= 80 ? "80대 이상" : `${Math.floor(age / 10) * 10}대`;
   const riskLevel = RISK_LABEL(score);
-  const isHighRisk = score >= 60;
-  const warningTitle = score >= 75 ? "즉각 대응 필요" : score >= 50 ? "주의 행동 필요" : "기본 예방 권장";
-  const warningText = score >= 75
-    ? `현재 ${ageGroup} 연령대는 폭염에 취약할 수 있습니다. 아래 권고사항을 즉시 실행하세요.`
+  const actions = score >= 75
+    ? [
+      { icon: "🏠", title: "즉시 실내 이동", sub: "냉방 시설 또는 무더위쉼터로 바로 이동하세요", badge: "긴급", color: "#E53935" },
+      { icon: "💧", title: "수분 빠르게 보충", sub: "30분마다 200ml 이상 천천히 섭취하세요", badge: "긴급", color: "#1E88E5" },
+      { icon: "📱", title: "보호자 연락", sub: "고령자·기저질환자는 주변에 상태를 알려주세요", badge: "긴급", color: "#183153" },
+      { icon: "❄️", title: "쉼터 적극 이용", sub: "가까운 무더위쉼터 위치를 확인하세요", badge: "권장", color: "#4CAF50" },
+      { icon: "🚫", title: "야외활동 중단", sub: "운동·작업·장거리 이동을 미루세요", badge: "권장", color: "#FB8C00" },
+      { icon: "☎️", title: "증상 시 119", sub: "어지럼증, 의식저하, 구토가 있으면 신고하세요", badge: "확인", color: "#B91C1C" },
+    ]
     : score >= 50
-      ? `현재 ${district}의 위험도가 높아지고 있습니다. 야외활동 시간을 줄이고 수분 섭취를 유지하세요.`
-      : `현재 위험도는 낮지만 더위 노출이 길어지면 위험할 수 있습니다. 기본 예방수칙을 지켜주세요.`;
-  const actions = [
-    { icon: "💧", title: "물 자주 마시기", sub: isHighRisk ? "30분마다 200ml 이상 섭취하세요" : "목마르기 전에 자주 마시세요", priority: "high", color: "#1E88E5" },
-    { icon: "🏠", title: "야외활동 조절", sub: isHighRisk ? "오후 12시–16시 외출을 피하세요" : "한낮 장시간 외출은 줄이세요", priority: "high", color: "#E53935" },
-    { icon: "❄️", title: "무더위쉼터 이용", sub: score >= 50 ? "인근 쉼터를 적극 활용하세요" : "가까운 쉼터 위치를 확인하세요", priority: "high", color: "#4CAF50" },
-    { icon: "⏰", title: "활동 시간 조정", sub: "외출 시 아침 또는 저녁 시간을 권장합니다", priority: "medium", color: "#FB8C00" },
-    { icon: "👕", title: "얇고 밝은 옷 착용", sub: "통풍이 잘 되는 면 소재를 입으세요", priority: "medium", color: "#9C27B0" },
-    { icon: "📱", title: "가족·이웃 안부 확인", sub: "홀로 계신 어르신에게 연락하세요", priority: "medium", color: "#183153" },
-  ];
+      ? [
+        { icon: "⏰", title: "한낮 외출 줄이기", sub: "오후 12시-16시 장시간 외출을 피하세요", badge: "주의", color: "#FB8C00" },
+        { icon: "💧", title: "물 자주 마시기", sub: "목마르기 전 1시간마다 물을 마시세요", badge: "주의", color: "#1E88E5" },
+        { icon: "🌳", title: "그늘에서 휴식", sub: "이동 중 20-30분마다 쉬어가세요", badge: "권장", color: "#4CAF50" },
+        { icon: "👕", title: "얇고 밝은 옷", sub: "통풍이 잘 되는 밝은 옷을 입으세요", badge: "권장", color: "#9C27B0" },
+        { icon: "❄️", title: "쉼터 위치 확인", sub: "위험도가 오르면 바로 이동할 장소를 확인하세요", badge: "확인", color: "#183153" },
+        { icon: "📱", title: "가족 안부 확인", sub: "고령 가족이나 이웃에게 한 번 연락하세요", badge: "확인", color: "#607D8B" },
+      ]
+      : score >= 26
+        ? [
+          { icon: "💧", title: "수분 섭취 유지", sub: "외출 전후로 물을 충분히 마시세요", badge: "권장", color: "#1E88E5" },
+          { icon: "🧢", title: "햇빛 차단", sub: "모자, 양산, 선크림을 준비하세요", badge: "권장", color: "#FB8C00" },
+          { icon: "🌳", title: "그늘길 이용", sub: "가능하면 그늘이 있는 경로를 선택하세요", badge: "권장", color: "#4CAF50" },
+          { icon: "⏰", title: "활동 시간 조정", sub: "긴 외출은 아침 또는 저녁 시간대를 권장합니다", badge: "확인", color: "#183153" },
+        ]
+        : [
+          { icon: "☀️", title: "날씨 확인", sub: "외출 전 기온과 습도를 한 번 확인하세요", badge: "기본", color: "#F9A825" },
+          { icon: "💧", title: "물 챙기기", sub: "가벼운 외출에도 물을 준비하세요", badge: "기본", color: "#1E88E5" },
+          { icon: "👕", title: "가벼운 복장", sub: "통풍이 잘 되는 옷을 선택하세요", badge: "기본", color: "#4CAF50" },
+          { icon: "📍", title: "쉼터 알아두기", sub: "근처 무더위쉼터 위치를 미리 확인하세요", badge: "확인", color: "#183153" },
+        ];
 
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
@@ -1559,11 +1843,11 @@ function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
           <div className="w-7 h-7 rounded-xl flex items-center justify-center text-sm" style={{ background: "rgba(255,255,255,0.15)" }}>
             🤖
           </div>
-          <h1 className="text-xl font-black text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>AI 맞춤 가이드</h1>
+          <h1 className="text-xl font-black text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>맞춤 가이드</h1>
         </div>
         <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl" style={{ background: "rgba(255,255,255,0.1)" }}>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>{age}세 · {district} 기준</span>
+            <span className="text-sm font-bold text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>{ageLabel} · {district} 기준</span>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-xs" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "'Noto Sans KR', sans-serif" }}>현재 위험도</span>
               <span className="text-xs font-black px-2 py-0.5 rounded-full" style={{ background: RISK_COLOR(score), color: "white", fontFamily: "Inter, sans-serif" }}>{score}점 · {riskLevel}</span>
@@ -1573,32 +1857,19 @@ function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
       </div>
 
       <div className="px-4 py-4 space-y-4">
-        {/* Priority warning */}
-        <div className="rounded-2xl p-4 border-2" style={{ background: score >= 60 ? "#FFEBEE" : "#FFFDE7", borderColor: score >= 60 ? "#FFCDD2" : "#FFF59D" }}>
-          <div className="flex items-center gap-2 mb-1.5">
-            <AlertTriangle size={16} color={score >= 60 ? "#E53935" : "#F9A825"} />
-            <span className="text-sm font-bold" style={{ color: score >= 60 ? "#C62828" : "#78350F", fontFamily: "'Noto Sans KR', sans-serif" }}>{warningTitle}</span>
-          </div>
-          <p className="text-sm leading-relaxed" style={{ color: score >= 60 ? "#7F1D1D" : "#78350F", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            {warningText}
-          </p>
-        </div>
-
         {/* Action cards */}
         <div className="grid grid-cols-2 gap-3">
           {actions.map((a, i) => (
             <div
               key={i}
               className="bg-white rounded-2xl p-4 shadow-sm border flex flex-col gap-2"
-              style={{ borderColor: i < 3 ? a.color + "30" : "#F3F4F6" }}
+              style={{ borderColor: a.color + "30" }}
             >
               <div className="flex items-center justify-between">
                 <span className="text-2xl">{a.icon}</span>
-                {i < 3 && (
-                  <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: a.color + "18", color: a.color, fontFamily: "'Noto Sans KR', sans-serif" }}>
-                    긴급
-                  </span>
-                )}
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: a.color + "18", color: a.color, fontFamily: "'Noto Sans KR', sans-serif" }}>
+                  {a.badge}
+                </span>
               </div>
               <div>
                 <div className="text-sm font-bold leading-tight" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>{a.title}</div>
@@ -1640,14 +1911,14 @@ function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
 
 // ─── App Shell ────────────────────────────────────────────────────────────────
 
-const HOME_SCORE = 91;
+const HOME_SCORE = DEMO_RISK_SCORE;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("onboarding");
   const [riskData, setRiskData] = useState<RiskApiResponse | null>(null);
   const [selectedShelter, setSelectedShelter] = useState<SelectedShelter | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const homeScore = riskData?.risk.score ?? HOME_SCORE;
+  const homeScore = HOME_SCORE;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -1659,6 +1930,7 @@ export default function App() {
     switch (screen) {
       case "onboarding": return <OnboardingScreen onComplete={(data) => { setRiskData(data); setScreen("home"); }} />;
       case "home": return <HomeScreen onNav={setScreen} riskData={riskData} />;
+      case "heatmap": return <HeatmapScreen onNav={setScreen} riskData={riskData} />;
       case "analysis": return <AnalysisScreen riskData={riskData} />;
       case "shelter": return <ShelterScreen onNav={setScreen} riskData={riskData} onStartRoute={setSelectedShelter} />;
       case "nav": return <NavScreen onNav={setScreen} selectedShelter={selectedShelter} />;
@@ -1698,7 +1970,7 @@ export default function App() {
         </div>
 
         {/* Bottom nav (hidden on onboarding and route guidance) */}
-        {screen !== "onboarding" && screen !== "nav" && (
+        {screen !== "onboarding" && screen !== "nav" && screen !== "heatmap" && (
           <div className="flex-shrink-0" style={{ background: "white" }}>
             <BottomNav current={screen} onNav={setScreen} />
             <div style={{ height: 8 }} />
