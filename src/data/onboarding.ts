@@ -1,10 +1,23 @@
-import type { AgeGroupOption } from "../types";
+import type { AgeGroupOption, ProvinceValue } from "../types";
 
 export const AGE_GROUPS: AgeGroupOption[] = [
-  { id: "youth", label: "청소년", sub: "18세 미만", pastel: "#E8F5E9", accent: "#4CAF50" },
-  { id: "adult", label: "성인", sub: "18-59세", pastel: "#FFFDE7", accent: "#F9A825" },
-  { id: "senior", label: "고령자", sub: "60-74세", pastel: "#FFF3E0", accent: "#FB8C00" },
-  { id: "elderly", label: "노인", sub: "75세 이상", pastel: "#FFEBEE", accent: "#E53935" },
+  { value: 0, label: "0대", sub: "0~9세" },
+  { value: 10, label: "10대", sub: "10~19세" },
+  { value: 20, label: "20대", sub: "20~29세" },
+  { value: 30, label: "30대", sub: "30~39세" },
+  { value: 40, label: "40대", sub: "40~49세" },
+  { value: 50, label: "50대", sub: "50~59세" },
+  { value: 60, label: "60대", sub: "60~69세" },
+  { value: 70, label: "70대", sub: "70~79세" },
+  { value: 80, label: "80대+", sub: "80세 이상" },
 ];
 
-export const LOCATIONS = ["종로구", "중구", "용산구", "성동구", "광진구", "동대문구", "마포구", "강남구", "서초구", "송파구"];
+export const LOCATIONS = ["종로구", "중구", "용산구", "성동구", "광진구", "동대문구", "마포구", "강남구", "서초구", "송파구"] as const;
+
+export const PROVINCES = [
+  { value: "서울특별시", label: "서울특별시" },
+] as const;
+
+export const DISTRICTS_BY_PROVINCE: Record<ProvinceValue, typeof LOCATIONS> = {
+  서울특별시: LOCATIONS,
+};

@@ -8,11 +8,19 @@ import HomePage from "./pages/HomePage";
 import NavigationPage from "./pages/NavigationPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import ShelterPage from "./pages/ShelterPage";
-import type { Screen } from "./types";
+import WelcomePage from "./pages/WelcomePage";
+import type { Screen, UserSettings } from "./types";
 import { RISK_COLOR } from "./utils/risk";
 
+const DEFAULT_USER_SETTINGS: UserSettings = {
+  ageGroup: 20,
+  province: "서울특별시",
+  district: "",
+};
+
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("onboarding");
+  const [screen, setScreen] = useState<Screen>("welcome");
+  const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { location, loading, error, requestLocation } = useGeolocation();
 
@@ -22,10 +30,23 @@ export default function App() {
     }
   }, [screen]);
 
+  const completeOnboarding = (settings: UserSettings) => {
+    setUserSettings(settings);
+    setScreen("home");
+  };
+
   const renderScreen = () => {
     switch (screen) {
-      case "onboarding": return <OnboardingPage onComplete={() => setScreen("home")} />;
-      case "home": return <HomePage onNav={setScreen} />;
+      case "welcome": return (
+        <div className="relative h-full overflow-hidden">
+          <div className="h-full" aria-hidden="true" inert>
+            <OnboardingPage initialSettings={userSettings} onComplete={completeOnboarding} />
+          </div>
+          <WelcomePage onComplete={() => setScreen("onboarding")} />
+        </div>
+      );
+      case "onboarding": return <OnboardingPage initialSettings={userSettings} onComplete={completeOnboarding} />;
+      case "home": return <HomePage onNav={setScreen} settings={userSettings} />;
       case "analysis": return <AnalysisPage />;
       case "shelter": return (
         <ShelterPage
@@ -80,8 +101,8 @@ export default function App() {
           {renderScreen()}
         </div>
 
-        {/* Bottom nav (hidden on onboarding) */}
-        {screen !== "onboarding" && (
+        {/* Bottom nav (hidden on welcome, onboarding, and navigation) */}
+        {screen !== "welcome" && screen !== "onboarding" && screen !== "nav" && (
           <div className="flex-shrink-0" style={{ background: "white" }}>
             <BottomNav current={screen} onNav={setScreen} />
             <div style={{ height: 8 }} />
@@ -89,8 +110,8 @@ export default function App() {
         )}
 
         {/* Home indicator */}
-        <div className="flex justify-center pb-2 flex-shrink-0" style={{ background: "white" }}>
-          <div className="w-28 h-1 rounded-full bg-gray-300" />
+        <div className="flex justify-center pb-2 flex-shrink-0" style={{ background: screen === "welcome" ? "#183153" : "white" }}>
+          <div className="w-28 h-1 rounded-full" style={{ background: screen === "welcome" ? "rgba(255,255,255,0.35)" : "#D1D5DB" }} />
         </div>
       </div>
     </div>

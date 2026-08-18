@@ -1,16 +1,21 @@
 import { useState } from "react";
-import { BarChart2, ChevronRight, Droplets, MapPin, RefreshCw, Shield, Wind } from "lucide-react";
+import { BarChart2, ChevronRight, Droplets, MapPin, RefreshCw, Settings, Shield, Wind } from "lucide-react";
 import RiskGauge from "../components/RiskGauge";
 import RiskLegend from "../components/RiskLegend";
 import SeoulMap from "../components/SeoulMap";
 import { HOME_SCORE, RISK_FACTORS } from "../data/risk";
 import { SEOUL_PATHS } from "../data/seoulDistricts";
-import type { NavigateHandler } from "../types";
+import type { NavigateHandler, UserSettings } from "../types";
 import { RISK_BG, RISK_COLOR, RISK_LABEL } from "../utils/risk";
 
-export default function HomePage({ onNav }: { onNav: NavigateHandler }) {
+interface HomePageProps {
+  onNav: NavigateHandler;
+  settings: UserSettings;
+}
+
+export default function HomePage({ onNav, settings }: HomePageProps) {
   const score = HOME_SCORE;
-  const [selectedDistrict, setSelectedDistrict] = useState("종로구");
+  const [selectedDistrict, setSelectedDistrict] = useState(settings.district || "종로구");
 
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
@@ -19,11 +24,22 @@ export default function HomePage({ onNav }: { onNav: NavigateHandler }) {
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1.5">
             <MapPin size={14} color="white" />
-            <span className="text-sm font-semibold text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>서울시 종로구</span>
+            <span className="text-sm font-semibold text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>{settings.province} {settings.district}</span>
           </div>
-          <div className="flex items-center gap-1 text-xs" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            <RefreshCw size={11} />
-            <span>방금 전 업데이트</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-xs" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Sans KR', sans-serif" }}>
+              <RefreshCw size={11} />
+              <span>방금 전 업데이트</span>
+            </div>
+            <button
+              onClick={() => onNav("onboarding")}
+              aria-label="초기 설정 변경"
+              title="초기 설정 변경"
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: "rgba(255,255,255,0.14)" }}
+            >
+              <Settings size={14} color="white" />
+            </button>
           </div>
         </div>
         <div className="flex items-end justify-between mt-4">
@@ -136,4 +152,3 @@ export default function HomePage({ onNav }: { onNav: NavigateHandler }) {
     </div>
   );
 }
-

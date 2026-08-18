@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle, Heart, LoaderCircle, MapPin, Phone, RefreshCw } from "lucide-react";
+import { ArrowLeft, CheckCircle, Heart, LoaderCircle, MapPin, Phone, RefreshCw } from "lucide-react";
 import { NAVIGATION_STEPS } from "../data/navigation";
 import type { Coordinates, NavigateHandler } from "../types";
 
@@ -23,6 +23,14 @@ export default function NavigationPage({
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
+        <button
+          onClick={() => onNav("shelter")}
+          className="flex items-center gap-1 text-sm font-bold mb-3"
+          style={{ color: "rgba(255,255,255,0.8)", fontFamily: "'Noto Sans KR', sans-serif" }}
+        >
+          <ArrowLeft size={16} />
+          쉼터로 돌아가기
+        </button>
         <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>길찾기</h1>
         <div className="flex items-center gap-4 mt-3">
           <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.12)" }}>

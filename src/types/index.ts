@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
-export type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
+export type Screen = "welcome" | "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
 export type NavigateHandler = (screen: Screen) => void;
 
 export interface Coordinates {
@@ -8,14 +8,20 @@ export interface Coordinates {
   lng: number;
 }
 
-export type AgeGroup = "youth" | "adult" | "senior" | "elderly";
+export type AgeGroup = 0 | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80;
+
+export type ProvinceValue = "서울특별시";
+
+export interface UserSettings {
+  ageGroup: AgeGroup;
+  province: ProvinceValue;
+  district: string;
+}
 
 export type AgeGroupOption = {
-  id: AgeGroup;
+  value: AgeGroup;
   label: string;
   sub: string;
-  pastel: string;
-  accent: string;
 };
 
 export type SeoulDistrict = {
