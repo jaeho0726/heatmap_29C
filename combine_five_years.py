@@ -10,18 +10,15 @@ weather_df = pd.read_csv('./data/preprocessed_data/district_weather.csv', encodi
 time_col = 'time' if 'time' in weather_df.columns else '일시'
 weather_df['year'] = pd.to_datetime(weather_df[time_col]).dt.year
 
-weather_yearly = weather_df.groupby(['district', 'year']).mean(numeric_only=True).reset_index()
-
-base_df = pd.merge(
-    district_population_df,
-    green_ratio_df,
-    on=['district', 'year'],
-    how='inner'
-)
+annual_features = pd.merge(district_population_df, 
+                           green_ratio_df, 
+                           on=['district', 'year'], 
+                           how='inner'
+                           )
 
 five_years_df = pd.merge(
-    base_df,
-    weather_yearly,
+    weather_df,
+    annual_features,
     on=['district', 'year'], 
     how='right' 
 )
