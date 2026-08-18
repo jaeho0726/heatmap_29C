@@ -1,4 +1,10 @@
-export default function ShelterMap() {
+import type { Coordinates } from "../types";
+
+interface ShelterMapProps {
+  userLocation: Coordinates | null;
+}
+
+export default function ShelterMap({ userLocation }: ShelterMapProps) {
   return (
     <div className="relative w-full rounded-2xl overflow-hidden" style={{ height: 200, background: "#E8F0F7" }}>
       {/* Simplified map background */}
@@ -17,9 +23,13 @@ export default function ShelterMap() {
           <rect key={i} x={x} y={y} width={w} height={h} rx={2} fill={i % 3 === 0 ? "#CBD5E1" : "#D1D9E6"} />
         ))}
         {/* User location */}
-        <circle cx="160" cy="100" r="12" fill="#183153" fillOpacity="0.15" />
-        <circle cx="160" cy="100" r="6" fill="#183153" />
-        <circle cx="160" cy="100" r="3" fill="white" />
+        {userLocation && (
+          <>
+            <circle cx="160" cy="100" r="12" fill="#183153" fillOpacity="0.15" />
+            <circle cx="160" cy="100" r="6" fill="#183153" />
+            <circle cx="160" cy="100" r="3" fill="white" />
+          </>
+        )}
         {/* Shelter markers */}
         {[[90, 72], [200, 55], [245, 105]].map(([sx, sy], i) => (
           <g key={i}>
@@ -28,15 +38,19 @@ export default function ShelterMap() {
           </g>
         ))}
         {/* Distance lines */}
-        <line x1="160" y1="100" x2="90" y2="72" stroke="#4CAF50" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.6" />
+        {userLocation && (
+          <line x1="160" y1="100" x2="90" y2="72" stroke="#4CAF50" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.6" />
+        )}
       </svg>
       {/* Overlay labels */}
-      <div className="absolute bottom-2 left-2">
-        <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-full shadow-sm">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#183153" }} />
-          <span className="text-xs font-semibold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>내 위치</span>
+      {userLocation && (
+        <div className="absolute bottom-2 left-2">
+          <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-full shadow-sm">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#183153" }} />
+            <span className="text-xs font-semibold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>내 위치</span>
+          </div>
         </div>
-      </div>
+      )}
       <div className="absolute bottom-2 right-2">
         <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-full shadow-sm">
           <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#4CAF50" }} />

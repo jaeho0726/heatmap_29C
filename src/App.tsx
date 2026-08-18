@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import BottomNav from "./components/BottomNav";
 import { HOME_SCORE } from "./data/risk";
+import useGeolocation from "./hooks/useGeolocation";
 import AnalysisPage from "./pages/AnalysisPage";
 import GuidePage from "./pages/GuidePage";
 import HomePage from "./pages/HomePage";
@@ -13,6 +14,7 @@ import { RISK_COLOR } from "./utils/risk";
 export default function App() {
   const [screen, setScreen] = useState<Screen>("onboarding");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { location, loading, error, requestLocation } = useGeolocation();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -25,8 +27,24 @@ export default function App() {
       case "onboarding": return <OnboardingPage onComplete={() => setScreen("home")} />;
       case "home": return <HomePage onNav={setScreen} />;
       case "analysis": return <AnalysisPage />;
-      case "shelter": return <ShelterPage onNav={setScreen} />;
-      case "nav": return <NavigationPage onNav={setScreen} />;
+      case "shelter": return (
+        <ShelterPage
+          onNav={setScreen}
+          userLocation={location}
+          locationLoading={loading}
+          locationError={error}
+          onRequestLocation={requestLocation}
+        />
+      );
+      case "nav": return (
+        <NavigationPage
+          onNav={setScreen}
+          userLocation={location}
+          locationLoading={loading}
+          locationError={error}
+          onRequestLocation={requestLocation}
+        />
+      );
       case "guide": return <GuidePage />;
     }
   };

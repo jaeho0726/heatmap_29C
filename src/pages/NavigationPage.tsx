@@ -1,9 +1,23 @@
 import { useState } from "react";
-import { CheckCircle, Heart, Phone, RefreshCw } from "lucide-react";
+import { CheckCircle, Heart, LoaderCircle, MapPin, Phone, RefreshCw } from "lucide-react";
 import { NAVIGATION_STEPS } from "../data/navigation";
-import type { NavigateHandler } from "../types";
+import type { Coordinates, NavigateHandler } from "../types";
 
-export default function NavigationPage({ onNav }: { onNav: NavigateHandler }) {
+interface NavigationPageProps {
+  onNav: NavigateHandler;
+  userLocation: Coordinates | null;
+  locationLoading: boolean;
+  locationError: string | null;
+  onRequestLocation: () => void;
+}
+
+export default function NavigationPage({
+  onNav,
+  userLocation,
+  locationLoading,
+  locationError,
+  onRequestLocation,
+}: NavigationPageProps) {
   const [step, setStep] = useState(0);
 
   return (
@@ -12,6 +26,7 @@ export default function NavigationPage({ onNav }: { onNav: NavigateHandler }) {
         <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>길찾기</h1>
         <div className="flex items-center gap-4 mt-3">
           <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.12)" }}>
+            <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.55)", fontFamily: "'Noto Sans KR', sans-serif" }}>출발지 · 현재 위치</div>
             <div className="text-xs mb-0.5" style={{ color: "rgba(255,255,255,0.55)", fontFamily: "'Noto Sans KR', sans-serif" }}>목적지</div>
             <div className="text-sm font-bold text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>창신동 주민센터 쉼터</div>
           </div>
@@ -27,6 +42,34 @@ export default function NavigationPage({ onNav }: { onNav: NavigateHandler }) {
       </div>
 
       <div className="px-4 py-4 space-y-4">
+        {!userLocation && (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border text-center" style={{ borderColor: "#F3F4F6" }}>
+            {locationLoading ? (
+              <div className="flex items-center justify-center gap-2 py-3">
+                <LoaderCircle size={18} color="#183153" className="animate-spin" />
+                <span className="text-sm font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>현재 위치 확인 중...</span>
+              </div>
+            ) : (
+              <>
+                <MapPin size={24} color={locationError ? "#E53935" : "#183153"} className="mx-auto mb-2" />
+                <p className="text-sm font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>길찾기를 사용하려면 현재 위치 권한이 필요합니다.</p>
+                {locationError && (
+                  <p className="text-xs mt-1" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>{locationError}</p>
+                )}
+                <button
+                  onClick={onRequestLocation}
+                  className="mt-4 px-5 py-2.5 rounded-xl font-bold text-sm"
+                  style={{ background: "#183153", color: "white", fontFamily: "'Noto Sans KR', sans-serif" }}
+                >
+                  {locationError ? "다시 시도" : "현재 위치 확인"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {userLocation && (
+          <>
         {/* Route map */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm border" style={{ borderColor: "#F3F4F6" }}>
           <div className="relative" style={{ height: 220, background: "#EBF0F7" }}>
@@ -96,6 +139,8 @@ export default function NavigationPage({ onNav }: { onNav: NavigateHandler }) {
             ))}
           </div>
         </div>
+          </>
+        )}
 
         {/* Emergency button */}
         <button
@@ -122,4 +167,3 @@ export default function NavigationPage({ onNav }: { onNav: NavigateHandler }) {
     </div>
   );
 }
-

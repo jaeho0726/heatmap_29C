@@ -3,6 +3,11 @@ import type { LucideIcon } from "lucide-react";
 export type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide";
 export type NavigateHandler = (screen: Screen) => void;
 
+export interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 export type AgeGroup = "youth" | "adult" | "senior" | "elderly";
 
 export type AgeGroupOption = {

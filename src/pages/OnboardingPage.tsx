@@ -58,7 +58,7 @@ export default function OnboardingPage({ onComplete }: { onComplete: () => void 
         {/* Location */}
         <div>
           <label className="block text-sm font-bold mb-3" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            현재 거주 지역
+            위험도 확인 지역
           </label>
           <div className="relative">
             <button
@@ -122,4 +122,3 @@ export default function OnboardingPage({ onComplete }: { onComplete: () => void 
     </div>
   );
 }
-
