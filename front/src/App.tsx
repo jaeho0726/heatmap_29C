@@ -12,12 +12,10 @@ import {
 
 type Screen = "welcome" | "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide" | "heatmap" | "settings";
 type AgeGroup = "0-9" | "10-19" | "20-29" | "30-39" | "40-49" | "50-59" | "60-69" | "70-79" | "80+";
-type Province = "서울특별시";
-type OnboardingMode = "full" | "age" | "location";
+type OnboardingMode = "full" | "age";
 
 type UserSettings = {
   ageGroup: AgeGroup;
-  province: Province;
   district: string;
 };
 
@@ -221,17 +219,6 @@ async function fetchRisk(age: number, lat: number, lon: number, district?: strin
   return await response.json();
 }
 
-async function fetchSeoulHeatmap(age: number): Promise<DistrictHeatData[]> {
-  const response = await fetch(`http://127.0.0.1:8000/api/seoul-heatmap?age=${age}`);
-
-  if (!response.ok) {
-    throw new Error("서울 폭염 현황 조회 실패");
-  }
-
-  const data = await response.json();
-  return data.districts ?? [];
-}
-
 async function fetchForecastRisk(age: number, lat: number, lon: number, district: string | null): Promise<ForecastRiskData[]> {
   const params = new URLSearchParams({
     age: String(age),
@@ -273,12 +260,6 @@ function ageGroupToAge(ageGroup: AgeGroup) {
   if (ageGroup === "60-69") return 65;
   if (ageGroup === "70-79") return 75;
   return 85;
-}
-
-function getAgeGroup(age: number) {
-  if (age >= 80) return "80+";
-  const start = Math.floor(age / 10) * 10;
-  return `${start}-${start + 9}`;
 }
 
 // Seoul district SVG paths with approximate district-size proportions.
@@ -323,24 +304,11 @@ const AGE_GROUPS = [
   { id: "80+" as AgeGroup, label: "80대 이상", sub: "80세 이상", pastel: "#FFEBEE", accent: "#B91C1C" },
 ];
 
-const PROVINCES: Province[] = ["서울특별시"];
-const DISTRICTS_BY_PROVINCE: Record<Province, string[]> = {
-  서울특별시: SEOUL_PATHS.map((district) => district.name),
-};
-
 const SHELTERS = [
   { id: 1, name: "종로구 무더위쉼터 (창신동 주민센터)", dist: "280m", time: "4분", type: "주민센터", open: "09:00–21:00", lat: 37.5742, lng: 127.0142 },
   { id: 2, name: "낙원상가 2층 실내쉼터", dist: "430m", time: "6분", type: "공공건물", open: "10:00–22:00", lat: 37.5721, lng: 126.9915 },
   { id: 3, name: "탑골공원 냉방 휴게소", dist: "510m", time: "8분", type: "공원시설", open: "08:00–20:00", lat: 37.5726, lng: 126.9893 },
 ];
-
-function calculateHeatIndex(temperature: number, humidity: number) {
-  if (temperature < 27) {
-    return temperature;
-  }
-
-  return temperature + (humidity - 40) * 0.08;
-}
 
 function getGreenRatioLabel(greenRatio: number) {
   const percent = greenRatio <= 1 ? greenRatio * 100 : greenRatio;
@@ -683,6 +651,20 @@ function RiskLegend() {
   );
 }
 
+function HomeButton({ onNav, className = "mb-3" }: { onNav: (s: Screen) => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onNav("home")}
+      className={`inline-flex min-h-10 items-center gap-1.5 rounded-lg px-1 text-sm font-bold ${className}`}
+      style={{ color: "rgba(255,255,255,0.85)" }}
+    >
+      <ArrowLeft size={17} aria-hidden="true" />
+      홈으로
+    </button>
+  );
+}
+
 // ─── Bottom Nav ───────────────────────────────────────────────────────────────
 
 function BottomNav({
@@ -695,15 +677,15 @@ function BottomNav({
   const tabs: { id: Screen; icon: typeof Home; label: string }[] = [
   { id: "home", icon: Home, label: "홈" },
   { id: "shelter", icon: Map, label: "쉼터" },
-  { id: "guide", icon: BookOpen, label: "AI 가이드" },
+  { id: "guide", icon: BookOpen, label: "맞춤 가이드" },
 ];
   return (
-    <nav className="flex items-center justify-around border-t border-gray-100 bg-white px-2 pt-2 pb-safe">
+    <nav className="flex items-center border-t border-gray-100 bg-white px-2 pt-2 pb-safe">
       {tabs.map(({ id, icon: Icon, label }) => (
         <button
           key={id}
           onClick={() => onNav(id)}
-          className="flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-colors"
+          className="flex flex-1 flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-colors"
           style={{ color: current === id ? "#183153" : "#9CA3AF" }}
         >
           <Icon size={22} strokeWidth={current === id ? 2.5 : 1.8} />
@@ -724,10 +706,7 @@ function OnboardingScreen({ initialSettings, mode, showWelcome = false, onStarte
   onComplete: (settings: UserSettings, data: RiskApiResponse) => void;
 }) {
   const [started, setStarted] = useState(!showWelcome);
-  const [step, setStep] = useState<"age" | "location">(mode === "location" ? "location" : "age");
   const [ageIndex, setAgeIndex] = useState(() => Math.max(0, AGE_GROUPS.findIndex((group) => group.id === initialSettings.ageGroup)));
-  const [province] = useState<Province>(initialSettings.province);
-  const [district, setDistrict] = useState(initialSettings.district);
   const [submitting, setSubmitting] = useState(false);
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const selectedAgeGroup = AGE_GROUPS[ageIndex];
@@ -739,7 +718,7 @@ function OnboardingScreen({ initialSettings, mode, showWelcome = false, onStarte
   };
 
   const handleStart = () => {
-    if (!age || !district || submitting) return;
+    if (!age || submitting) return;
     setSubmitting(true);
 
     navigator.geolocation.getCurrentPosition(
@@ -754,9 +733,9 @@ function OnboardingScreen({ initialSettings, mode, showWelcome = false, onStarte
         }
 
         try {
-          const data = await fetchRisk(numericAge, lat, lon, district);
+          const data = await fetchRisk(numericAge, lat, lon);
           console.log("위험도 결과:", data);
-          onComplete({ ageGroup: age, province, district }, data);
+          onComplete({ ageGroup: age, district: data.location.district ?? initialSettings.district }, data);
         } catch (error) {
           console.error("위험도 조회 실패:", error);
           const message = error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
@@ -845,13 +824,11 @@ function OnboardingScreen({ initialSettings, mode, showWelcome = false, onStarte
         inert={!started}
         style={{ opacity: started ? 1 : 0, transform: started ? "translateY(0)" : "translateY(20px)", transition: reduceMotion ? "none" : "opacity 450ms ease 180ms, transform 500ms ease 120ms" }}
       >
-        <div className="flex items-center justify-between mb-4">
-          {step === "location" && mode === "full" ? <button type="button" onClick={() => setStep("age")} className="text-sm font-bold" style={{ color: "#183153" }}>← 이전</button> : <span />}
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "#EFF4FB", color: "#183153" }}>{mode === "full" ? (step === "age" ? "1 / 2" : "2 / 2") : "설정 변경"}</span>
+        <div className="flex justify-end mb-4">
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "#EFF4FB", color: "#183153" }}>{mode === "full" ? "시작 설정" : "설정 변경"}</span>
         </div>
 
-        {step === "age" ? (
-          <div>
+        <div>
             <label className="block text-base font-bold mb-1" style={{ color: "#183153" }}>연령대를 선택해주세요</label>
             <p className="text-xs mb-5" style={{ color: "#6B7280" }}>정확한 나이가 아닌 연령대 기준으로 안내합니다.</p>
             <div className="rounded-2xl border-2 p-4" style={{ borderColor: selectedAgeGroup.accent, background: selectedAgeGroup.pastel }}>
@@ -864,24 +841,13 @@ function OnboardingScreen({ initialSettings, mode, showWelcome = false, onStarte
                 {AGE_GROUPS.map((group) => <span key={group.id} className="text-center" style={{ color: group.id === age ? "#183153" : "#9CA3AF", fontSize: "8px", fontWeight: group.id === age ? 800 : 500 }}>{group.label}</span>)}
               </div>
             </div>
-          </div>
-        ) : (
-          <div>
-            <label className="block text-base font-bold mb-1" style={{ color: "#183153" }}>위험도 확인 지역</label>
-            <p className="text-xs mb-5" style={{ color: "#6B7280" }}>홈과 AI 위험 분석의 기준 지역입니다.</p>
-            <div className="space-y-4">
-              <label className="block text-xs font-bold" style={{ color: "#6B7280" }}>시·도
-                <input value={PROVINCES[0]} disabled className="mt-2 w-full p-4 rounded-2xl border-2 text-sm font-semibold" style={{ borderColor: "#E5E7EB", background: "#F5F7FA", color: "#111827" }} />
-              </label>
-              <label className="block text-xs font-bold" style={{ color: "#6B7280" }}>시·군·구
-                <select value={district} onChange={(event) => setDistrict(event.target.value)} className="mt-2 w-full p-4 rounded-2xl border-2 text-sm font-semibold" style={{ borderColor: "#E5E7EB", background: "#F5F7FA", color: district ? "#111827" : "#9CA3AF" }}>
-                  <option value="">자치구 선택</option>
-                  {DISTRICTS_BY_PROVINCE[province].map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-              </label>
+            <div className="mt-5 flex gap-3 rounded-2xl border p-4" style={{ background: "#EFF4FB", borderColor: "#DCE7F5" }}>
+              <MapPin size={20} color="#183153" className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <p className="text-sm leading-relaxed" style={{ color: "#374151" }}>
+                현재 위치를 기반으로 주변 지역의 폭염 위험도를 분석합니다.<br />시작하려면 위치 접근 권한이 필요합니다.
+              </p>
             </div>
           </div>
-        )}
       </div>
 
       <div
@@ -890,11 +856,7 @@ function OnboardingScreen({ initialSettings, mode, showWelcome = false, onStarte
         inert={!started}
         style={{ opacity: started ? 1 : 0, transform: started ? "translateY(0)" : "translateY(16px)", transition: reduceMotion ? "none" : "opacity 450ms ease 220ms, transform 500ms ease 160ms" }}
       >
-        {step === "age" && mode === "full" ? (
-          <button type="button" onClick={() => setStep("location")} className="w-full py-4 rounded-2xl font-bold text-base" style={{ background: "#183153", color: "white" }}>다음</button>
-        ) : (
-          <button type="button" onClick={handleStart} disabled={!district || submitting} className="w-full py-4 rounded-2xl font-bold text-base" style={{ background: district && !submitting ? "#183153" : "#E5E7EB", color: district && !submitting ? "white" : "#9CA3AF" }}>{submitting ? "위험도 확인 중..." : mode === "full" ? "HeatMap 시작하기" : "변경 완료"}</button>
-        )}
+        <button type="button" onClick={handleStart} disabled={submitting} className="w-full py-4 rounded-2xl font-bold text-base" style={{ background: !submitting ? "#183153" : "#E5E7EB", color: !submitting ? "white" : "#9CA3AF" }}>{submitting ? "위험도 확인 중..." : mode === "full" ? "현재 위치로 시작하기" : "변경 완료"}</button>
       </div>
     </div>
   );
@@ -911,7 +873,7 @@ function SettingsScreen({ settings, onEdit, onHome, onWelcome }: {
   return (
     <div className="flex flex-col min-h-full bg-gray-50">
       <div className="px-5 pt-8 pb-5" style={{ background: "#183153" }}>
-        <button type="button" onClick={onHome} className="text-sm font-bold mb-3" style={{ color: "rgba(255,255,255,0.8)" }}>← 홈으로</button>
+        <HomeButton onNav={() => onHome()} />
         <h1 className="text-xl font-black text-white">설정</h1>
       </div>
       <div className="p-4 space-y-5">
@@ -922,10 +884,10 @@ function SettingsScreen({ settings, onEdit, onHome, onWelcome }: {
               <span className="text-sm font-bold" style={{ color: "#183153" }}>연령대 변경</span>
               <span className="text-xs" style={{ color: "#6B7280" }}>{selectedAge?.label} ›</span>
             </button>
-            <button type="button" onClick={() => onEdit("location")} className="w-full flex items-center justify-between p-4 text-left">
-              <span className="text-sm font-bold" style={{ color: "#183153" }}>위험도 확인 지역 변경</span>
-              <span className="text-xs" style={{ color: "#6B7280" }}>{settings.district} ›</span>
-            </button>
+            <div className="w-full flex items-center justify-between p-4">
+              <span className="text-sm font-bold" style={{ color: "#183153" }}>현재 위치 기준 지역</span>
+              <span className="text-xs" style={{ color: "#6B7280" }}>{settings.district || "위치 확인 필요"}</span>
+            </div>
           </div>
         </section>
         <section>
@@ -1301,15 +1263,7 @@ function HeatmapScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskDa
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
-        <button
-          type="button"
-          onClick={() => onNav("home")}
-          className="w-9 h-9 rounded-full flex items-center justify-center mb-4"
-          style={{ background: "rgba(255,255,255,0.12)", color: "white" }}
-          aria-label="뒤로가기"
-        >
-          <ArrowLeft size={19} />
-        </button>
+        <HomeButton onNav={onNav} />
         <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>서울 폭염 현황 지도</h1>
         <p className="text-sm" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "'Noto Sans KR', sans-serif" }}>
           자치구별 현재 위험도와 시간대별 변화를 확인하세요
@@ -1412,8 +1366,7 @@ function HeatmapScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskDa
 
 // ─── Risk Analysis ─────────────────────────────────────────────────────────────
 
-function AnalysisScreen({ riskData }: { riskData: RiskApiResponse | null }) {
-  const [forecastData, setForecastData] = useState<ForecastRiskData[]>([]);
+function AnalysisScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData: RiskApiResponse | null }) {
   const [forecastLoading, setForecastLoading] = useState(false);
   const score = DEMO_RISK_SCORE;
   const district = riskData?.location.district ?? "종로구";
@@ -1472,13 +1425,12 @@ function AnalysisScreen({ riskData }: { riskData: RiskApiResponse | null }) {
       setForecastLoading(true);
 
       try {
-        const data = await fetchForecastRisk(
+        await fetchForecastRisk(
           riskData.age,
           riskData.location.lat,
           riskData.location.lon,
           riskData.location.district
         );
-        setForecastData(data);
       } catch (error) {
         console.error("시간대별 예보 위험도 조회 실패:", error);
       } finally {
@@ -1492,6 +1444,7 @@ function AnalysisScreen({ riskData }: { riskData: RiskApiResponse | null }) {
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
+        <HomeButton onNav={onNav} />
         <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>AI 위험 분석</h1>
         <p className="text-sm" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "'Noto Sans KR', sans-serif" }}>서울시 {district} · {todayLabel}</p>
       </div>
@@ -1683,6 +1636,7 @@ function ShelterScreen({
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
+        <HomeButton onNav={onNav} />
         <h1
   className="text-xl font-black mb-1"
   style={{
@@ -1790,6 +1744,7 @@ function NavScreen({ onNav, selectedShelter }: { onNav: (s: Screen) => void; sel
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
+        <HomeButton onNav={onNav} />
         <h1 className="text-xl font-black text-white mb-1" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>길찾기</h1>
         <div className="flex items-center gap-4 mt-3">
           <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.12)" }}>
@@ -1888,17 +1843,6 @@ function NavScreen({ onNav, selectedShelter }: { onNav: (s: Screen) => void; sel
           가장 가까운 쉼터 재검색
         </button>
 
-        {/* Emergency call */}
-        <div className="flex gap-3">
-          <button className="flex-1 py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5" style={{ background: "#183153", color: "white", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            <Phone size={15} />
-            119 응급 신고
-          </button>
-          <button className="flex-1 py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5" style={{ background: "#F5F7FA", color: "#374151", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            <Heart size={15} color="#E53935" />
-            건강 정보 확인
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -1906,7 +1850,7 @@ function NavScreen({ onNav, selectedShelter }: { onNav: (s: Screen) => void; sel
 
 // ─── AI Guide ─────────────────────────────────────────────────────────────────
 
-function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
+function GuideScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData: RiskApiResponse | null }) {
   const score = DEMO_RISK_SCORE;
   const district = riskData?.location.district ?? "종로구";
   const age = riskData?.age ?? 35;
@@ -1947,6 +1891,7 @@ function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
   return (
     <div className="flex flex-col bg-gray-50 pb-4">
       <div className="px-5 pt-12 pb-5" style={{ background: "#183153" }}>
+        <HomeButton onNav={onNav} />
         <div className="flex items-center gap-2 mb-2">
           <div className="w-7 h-7 rounded-xl flex items-center justify-center text-sm" style={{ background: "rgba(255,255,255,0.15)" }}>
             🤖
@@ -1993,7 +1938,11 @@ function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
             <Heart size={15} color="#E53935" />
             <h2 className="text-sm font-bold" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>폭염 증상 즉시 신고 체크리스트</h2>
           </div>
-          {["어지럼증 또는 두통", "과도한 발한 또는 무한증", "근육 경련 발생", "의식 혼탁 또는 구역감"].map((tip, i) => (
+          <div className="mb-2 flex items-start gap-2 rounded-xl px-3 py-2.5" style={{ background: "#FFF3E0", color: "#9A3412" }}>
+            <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+            <p className="text-sm font-bold leading-snug">다음 증상 중 하나라도 나타나면 즉시 119에 신고하세요.</p>
+          </div>
+          {["어지럼증 또는 두통", "근육 경련 발생", "의식 혼탁 또는 구역감"].map((tip, i) => (
             <div key={i} className="flex items-center gap-2.5 py-2 border-b last:border-0" style={{ borderColor: "#F3F4F6" }}>
               <AlertTriangle size={13} color="#FB8C00" className="flex-shrink-0" />
               <span className="text-sm" style={{ color: "#374151", fontFamily: "'Noto Sans KR', sans-serif" }}>{tip}</span>
@@ -2025,7 +1974,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [welcomeStarted, setWelcomeStarted] = useState(false);
   const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>("full");
-  const [userSettings, setUserSettings] = useState<UserSettings>({ ageGroup: "0-9", province: "서울특별시", district: "" });
+  const [userSettings, setUserSettings] = useState<UserSettings>({ ageGroup: "0-9", district: "" });
   const [riskData, setRiskData] = useState<RiskApiResponse | null>(null);
   const [selectedShelter, setSelectedShelter] = useState<SelectedShelter | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -2054,10 +2003,10 @@ export default function App() {
       case "onboarding": return <OnboardingScreen initialSettings={userSettings} mode={onboardingMode} onComplete={completeOnboarding} />;
       case "home": return <HomeScreen onNav={setScreen} riskData={riskData} />;
       case "heatmap": return <HeatmapScreen onNav={setScreen} riskData={riskData} />;
-      case "analysis": return <AnalysisScreen riskData={riskData} />;
+      case "analysis": return <AnalysisScreen onNav={setScreen} riskData={riskData} />;
       case "shelter": return <ShelterScreen onNav={setScreen} riskData={riskData} onStartRoute={setSelectedShelter} />;
       case "nav": return <NavScreen onNav={setScreen} selectedShelter={selectedShelter} />;
-      case "guide": return <GuideScreen riskData={riskData} />;
+      case "guide": return <GuideScreen onNav={setScreen} riskData={riskData} />;
       case "settings": return <SettingsScreen settings={userSettings} onEdit={openSettingsEditor} onHome={() => setScreen("home")} onWelcome={() => { setWelcomeStarted(false); setScreen("welcome"); }} />;
     }
   };
