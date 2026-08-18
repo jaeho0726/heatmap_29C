@@ -2,16 +2,24 @@ import { useState, useEffect, useRef } from "react";
 import {
   MapPin, Thermometer, Wind, Droplets, AlertTriangle,
   Navigation, ChevronRight, Phone, Heart, Clock,
-  ArrowLeft, Search, Star, CheckCircle, Info,
+  ArrowLeft, CheckCircle, Info,
   Home, BarChart2, Map, BookOpen,
-  Users, TreePine, Building, Flame, Moon,
-  RefreshCw, Shield
+  Users, TreePine, Building, Flame,
+  RefreshCw, Shield, Settings
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type Screen = "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide" | "heatmap";
+type Screen = "welcome" | "onboarding" | "home" | "analysis" | "shelter" | "nav" | "guide" | "heatmap" | "settings";
 type AgeGroup = "0-9" | "10-19" | "20-29" | "30-39" | "40-49" | "50-59" | "60-69" | "70-79" | "80+";
+type Province = "서울특별시";
+type OnboardingMode = "full" | "age" | "location";
+
+type UserSettings = {
+  ageGroup: AgeGroup;
+  province: Province;
+  district: string;
+};
 
 type RiskApiResponse = {
   age: number;
@@ -178,7 +186,7 @@ function isInSeoul(lat: number, lon: number) {
   return lat >= 37.4 && lat <= 37.7 && lon >= 126.75 && lon <= 127.2;
 }
 
-async function fetchRisk(age: number, lat: number, lon: number): Promise<RiskApiResponse> {
+async function fetchRisk(age: number, lat: number, lon: number, district?: string): Promise<RiskApiResponse> {
   const response = await fetch("http://127.0.0.1:8000/api/risk", {
     method: "POST",
     headers: {
@@ -188,11 +196,26 @@ async function fetchRisk(age: number, lat: number, lon: number): Promise<RiskApi
       age,
       lat,
       lon,
+      district,
     }),
   });
 
   if (!response.ok) {
-    throw new Error("위험도 조회 실패");
+    let message = `위험도 조회 실패 (HTTP ${response.status})`;
+    try {
+      const errorData: unknown = await response.json();
+      if (
+        typeof errorData === "object"
+        && errorData !== null
+        && "detail" in errorData
+        && typeof errorData.detail === "string"
+      ) {
+        message = errorData.detail;
+      }
+    } catch {
+      // JSON 오류 응답이 아니면 HTTP 상태를 포함한 기본 메시지를 사용합니다.
+    }
+    throw new Error(message);
   }
 
   return await response.json();
@@ -299,6 +322,11 @@ const AGE_GROUPS = [
   { id: "70-79" as AgeGroup, label: "70대", sub: "70-79세", pastel: "#FFEBEE", accent: "#E53935" },
   { id: "80+" as AgeGroup, label: "80대 이상", sub: "80세 이상", pastel: "#FFEBEE", accent: "#B91C1C" },
 ];
+
+const PROVINCES: Province[] = ["서울특별시"];
+const DISTRICTS_BY_PROVINCE: Record<Province, string[]> = {
+  서울특별시: SEOUL_PATHS.map((district) => district.name),
+};
 
 const SHELTERS = [
   { id: 1, name: "종로구 무더위쉼터 (창신동 주민센터)", dist: "280m", time: "4분", type: "주민센터", open: "09:00–21:00", lat: 37.5742, lng: 127.0142 },
@@ -688,14 +716,31 @@ function BottomNav({
 
 // ─── Screens ──────────────────────────────────────────────────────────────────
 
-function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) => void }) {
-  const [step, setStep] = useState<"intro" | "age">("intro");
-  const [ageIndex, setAgeIndex] = useState(0);
+function OnboardingScreen({ initialSettings, mode, showWelcome = false, onStarted, onComplete }: {
+  initialSettings: UserSettings;
+  mode: OnboardingMode;
+  showWelcome?: boolean;
+  onStarted?: () => void;
+  onComplete: (settings: UserSettings, data: RiskApiResponse) => void;
+}) {
+  const [started, setStarted] = useState(!showWelcome);
+  const [step, setStep] = useState<"age" | "location">(mode === "location" ? "location" : "age");
+  const [ageIndex, setAgeIndex] = useState(() => Math.max(0, AGE_GROUPS.findIndex((group) => group.id === initialSettings.ageGroup)));
+  const [province] = useState<Province>(initialSettings.province);
+  const [district, setDistrict] = useState(initialSettings.district);
+  const [submitting, setSubmitting] = useState(false);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const selectedAgeGroup = AGE_GROUPS[ageIndex];
   const age = selectedAgeGroup.id;
 
+  const startOnboarding = () => {
+    setStarted(true);
+    onStarted?.();
+  };
+
   const handleStart = () => {
-    if (!age) return;
+    if (!age || !district || submitting) return;
+    setSubmitting(true);
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -709,126 +754,184 @@ function OnboardingScreen({ onComplete }: { onComplete: (data: RiskApiResponse) 
         }
 
         try {
-          const data = await fetchRisk(numericAge, lat, lon);
+          const data = await fetchRisk(numericAge, lat, lon, district);
           console.log("위험도 결과:", data);
-          onComplete(data);
+          onComplete({ ageGroup: age, province, district }, data);
         } catch (error) {
           console.error("위험도 조회 실패:", error);
-          alert("위험도 조회에 실패했습니다. 백엔드 서버가 켜져 있는지 확인해주세요.");
+          const message = error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
+          alert(`위험도 조회에 실패했습니다.\n${message}`);
+          setSubmitting(false);
         }
       },
       (error) => {
         console.error("위치 가져오기 실패:", error);
         alert("현재 위치를 가져올 수 없습니다. 브라우저 위치 권한을 허용해주세요.");
+        setSubmitting(false);
       }
     );
   };
 
-  if (step === "intro") {
-    return (
-      <button
-        onClick={() => setStep("age")}
-        className="flex min-h-full w-full flex-col items-center justify-center px-6 text-center"
-        style={{ background: "#183153" }}
-      >
-        <div className="relative mb-5">
-          <div className="w-24 h-24 rounded-3xl flex items-center justify-center shadow-lg" style={{ background: "rgba(255,255,255,0.12)" }}>
-            <MapPin size={34} color="white" strokeWidth={2} />
-            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "#E53935" }}>
-              <Flame size={15} color="white" strokeWidth={2.5} />
-            </div>
-          </div>
-        </div>
-        <h1 className="text-5xl font-black text-white tracking-tight mb-3" style={{ fontFamily: "Inter, sans-serif" }}>HeatMap</h1>
-        <p className="text-sm leading-relaxed mb-10" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "'Noto Sans KR', sans-serif", maxWidth: 280 }}>
-          AI 기반 폭염 위험 예측 및<br />맞춤형 대응 서비스
-        </p>
-        <div className="w-full rounded-2xl py-4 font-bold text-base" style={{ background: "white", color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>
-          화면을 터치해 시작하기
-        </div>
-      </button>
-    );
-  }
-
   return (
-    <div className="flex flex-col min-h-full bg-white">
-      {/* Hero */}
-      <div className="flex flex-col items-center pt-14 pb-8 px-6" style={{ background: "#183153" }}>
-        {/* Logo */}
-        <div className="relative mb-4">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: "rgba(255,255,255,0.12)" }}>
-            <MapPin size={28} color="white" strokeWidth={2} />
-            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#E53935" }}>
-              <Flame size={13} color="white" strokeWidth={2.5} />
+    <div className="relative flex h-full min-h-full flex-col overflow-hidden bg-white">
+      {!started && (
+        <button type="button" onClick={startOnboarding} className="absolute inset-0 z-20 cursor-pointer" aria-label="HeatMap 시작하기">
+          <span className="sr-only">화면을 터치하여 시작</span>
+        </button>
+      )}
+
+      <div
+        className="flex flex-col items-center justify-center px-5 text-center motion-reduce:transition-none"
+        style={{
+          background: "#183153",
+          minHeight: started ? 92 : "100%",
+          paddingTop: started ? 12 : 40,
+          paddingBottom: started ? 12 : 40,
+          transition: reduceMotion ? "none" : "min-height 600ms ease, padding 600ms ease",
+        }}
+      >
+        <div className="relative motion-reduce:transition-none" style={{ marginBottom: started ? 6 : 20, transition: reduceMotion ? "none" : "margin 600ms ease" }}>
+          <div
+            className="flex items-center justify-center shadow-lg motion-reduce:transition-none"
+            style={{
+              width: started ? 40 : 96,
+              height: started ? 40 : 96,
+              borderRadius: started ? 12 : 24,
+              background: "rgba(255,255,255,0.12)",
+              transition: reduceMotion ? "none" : "width 600ms ease, height 600ms ease, border-radius 600ms ease",
+            }}
+          >
+            <MapPin size={34} color="white" strokeWidth={2} style={{ transform: started ? "scale(0.55)" : "scale(1)", transition: reduceMotion ? "none" : "transform 600ms ease" }} />
+            <div
+              className="absolute flex items-center justify-center rounded-full motion-reduce:transition-none"
+              style={{
+                right: started ? -2 : -4,
+                bottom: started ? -2 : -4,
+                width: started ? 16 : 32,
+                height: started ? 16 : 32,
+                background: "#E53935",
+                transition: reduceMotion ? "none" : "width 600ms ease, height 600ms ease, right 600ms ease, bottom 600ms ease",
+              }}
+            >
+              <Flame size={15} color="white" strokeWidth={2.5} style={{ transform: started ? "scale(0.55)" : "scale(1)", transition: reduceMotion ? "none" : "transform 600ms ease" }} />
             </div>
           </div>
         </div>
-        <h1 className="text-4xl font-black text-white tracking-tight mb-2" style={{ fontFamily: "Inter, sans-serif" }}>HeatMap</h1>
-        <p className="text-center text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "'Noto Sans KR', sans-serif", maxWidth: 260 }}>
-          AI 기반 폭염 위험 예측 및<br />맞춤형 대응 서비스
-        </p>
-        <div className="mt-5 flex gap-2.5 p-3.5 rounded-2xl" style={{ background: "rgba(255,255,255,0.12)", maxWidth: 320 }}>
-          <Info size={15} color="#F8C84E" className="flex-shrink-0 mt-0.5" />
-          <p className="text-xs leading-relaxed text-left" style={{ color: "rgba(255,255,255,0.86)", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            본 서비스는 의료 진단이 아닌 참고용 AI 위험도 예측 서비스입니다.
-          </p>
-        </div>
-      </div>
-
-      {/* Form */}
-      <div className="flex-1 px-5 py-6 space-y-6 overflow-y-auto">
-        {/* Age group */}
-        <div>
-          <label className="block text-sm font-bold mb-3" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            연령대 선택
-          </label>
-          <div className="rounded-2xl border-2 p-5" style={{ borderColor: selectedAgeGroup.accent, background: selectedAgeGroup.pastel }}>
-            <div className="mb-5">
-              <div className="text-xs font-bold mb-1" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>선택 연령대</div>
-              <div className="text-3xl font-black" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>{selectedAgeGroup.label}</div>
-              <div className="text-sm mt-1" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>{selectedAgeGroup.sub}</div>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={AGE_GROUPS.length - 1}
-              step={1}
-              value={ageIndex}
-              onChange={(event) => setAgeIndex(Number(event.target.value))}
-              className="w-full"
-              style={{ accentColor: selectedAgeGroup.accent }}
-            />
-            <div className="flex justify-between mt-2">
-              <span className="text-xs font-bold" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>0대</span>
-              <span className="text-xs font-bold" style={{ color: "#6B7280", fontFamily: "'Noto Sans KR', sans-serif" }}>80대+</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 p-3.5 rounded-2xl" style={{ background: "#EFF4FB" }}>
-          <MapPin size={16} color="#183153" className="flex-shrink-0" />
-          <p className="text-xs leading-relaxed" style={{ color: "#183153", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            위치는 확인 버튼을 누르면 자동으로 가져옵니다.
-          </p>
-        </div>
-
-      </div>
-
-      {/* CTA */}
-      <div className="px-5 pb-8 pt-2">
-        <button
-          onClick={handleStart}
-          disabled={!age}
-          className="w-full py-4 rounded-2xl font-bold text-base transition-all"
+        <h1
+          className="font-black text-white tracking-tight motion-reduce:transition-none"
+          style={{ fontFamily: "Inter, sans-serif", fontSize: started ? 20 : 48, lineHeight: 1, transition: reduceMotion ? "none" : "font-size 600ms ease" }}
+        >HeatMap</h1>
+        <div
+          className="motion-reduce:transition-none"
           style={{
-            background: age ? "#183153" : "#E5E7EB",
-            color: age ? "white" : "#9CA3AF",
-            fontFamily: "'Noto Sans KR', sans-serif",
-            fontSize: "17px",
+            maxHeight: started ? 0 : 120,
+            marginTop: started ? 0 : 12,
+            opacity: started ? 0 : 1,
+            transform: started ? "translateY(-8px)" : "translateY(0)",
+            overflow: "hidden",
+            transition: reduceMotion ? "none" : "max-height 500ms ease, margin 500ms ease, opacity 350ms ease, transform 500ms ease",
           }}
         >
-          폭염 위험 확인하기
-        </button>
+          <p className="text-sm leading-relaxed mb-10" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "'Noto Sans KR', sans-serif" }}>
+            AI 기반 폭염 위험 예측 및<br />맞춤형 대응 서비스
+          </p>
+          <p className="text-sm font-bold" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Sans KR', sans-serif" }}>화면을 터치하여 시작</p>
+        </div>
+      </div>
+
+      <div
+        className="flex-1 overflow-y-auto px-5 py-5 motion-reduce:transition-none"
+        aria-hidden={!started}
+        inert={!started}
+        style={{ opacity: started ? 1 : 0, transform: started ? "translateY(0)" : "translateY(20px)", transition: reduceMotion ? "none" : "opacity 450ms ease 180ms, transform 500ms ease 120ms" }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          {step === "location" && mode === "full" ? <button type="button" onClick={() => setStep("age")} className="text-sm font-bold" style={{ color: "#183153" }}>← 이전</button> : <span />}
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "#EFF4FB", color: "#183153" }}>{mode === "full" ? (step === "age" ? "1 / 2" : "2 / 2") : "설정 변경"}</span>
+        </div>
+
+        {step === "age" ? (
+          <div>
+            <label className="block text-base font-bold mb-1" style={{ color: "#183153" }}>연령대를 선택해주세요</label>
+            <p className="text-xs mb-5" style={{ color: "#6B7280" }}>정확한 나이가 아닌 연령대 기준으로 안내합니다.</p>
+            <div className="rounded-2xl border-2 p-4" style={{ borderColor: selectedAgeGroup.accent, background: selectedAgeGroup.pastel }}>
+              <div className="text-center mb-4">
+                <div className="text-3xl font-black" style={{ color: "#183153" }}>{selectedAgeGroup.label}</div>
+                <div className="text-xs mt-1" style={{ color: "#6B7280" }}>{selectedAgeGroup.sub}</div>
+              </div>
+              <input type="range" min={0} max={AGE_GROUPS.length - 1} step={1} value={ageIndex} onChange={(event) => setAgeIndex(Number(event.target.value))} className="w-full" style={{ accentColor: selectedAgeGroup.accent }} aria-label="연령대 선택" />
+              <div className="grid grid-cols-9 mt-2">
+                {AGE_GROUPS.map((group) => <span key={group.id} className="text-center" style={{ color: group.id === age ? "#183153" : "#9CA3AF", fontSize: "8px", fontWeight: group.id === age ? 800 : 500 }}>{group.label}</span>)}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="block text-base font-bold mb-1" style={{ color: "#183153" }}>위험도 확인 지역</label>
+            <p className="text-xs mb-5" style={{ color: "#6B7280" }}>홈과 AI 위험 분석의 기준 지역입니다.</p>
+            <div className="space-y-4">
+              <label className="block text-xs font-bold" style={{ color: "#6B7280" }}>시·도
+                <input value={PROVINCES[0]} disabled className="mt-2 w-full p-4 rounded-2xl border-2 text-sm font-semibold" style={{ borderColor: "#E5E7EB", background: "#F5F7FA", color: "#111827" }} />
+              </label>
+              <label className="block text-xs font-bold" style={{ color: "#6B7280" }}>시·군·구
+                <select value={district} onChange={(event) => setDistrict(event.target.value)} className="mt-2 w-full p-4 rounded-2xl border-2 text-sm font-semibold" style={{ borderColor: "#E5E7EB", background: "#F5F7FA", color: district ? "#111827" : "#9CA3AF" }}>
+                  <option value="">자치구 선택</option>
+                  {DISTRICTS_BY_PROVINCE[province].map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div
+        className="px-5 pb-6 pt-2 motion-reduce:transition-none"
+        aria-hidden={!started}
+        inert={!started}
+        style={{ opacity: started ? 1 : 0, transform: started ? "translateY(0)" : "translateY(16px)", transition: reduceMotion ? "none" : "opacity 450ms ease 220ms, transform 500ms ease 160ms" }}
+      >
+        {step === "age" && mode === "full" ? (
+          <button type="button" onClick={() => setStep("location")} className="w-full py-4 rounded-2xl font-bold text-base" style={{ background: "#183153", color: "white" }}>다음</button>
+        ) : (
+          <button type="button" onClick={handleStart} disabled={!district || submitting} className="w-full py-4 rounded-2xl font-bold text-base" style={{ background: district && !submitting ? "#183153" : "#E5E7EB", color: district && !submitting ? "white" : "#9CA3AF" }}>{submitting ? "위험도 확인 중..." : mode === "full" ? "HeatMap 시작하기" : "변경 완료"}</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettingsScreen({ settings, onEdit, onHome, onWelcome }: {
+  settings: UserSettings;
+  onEdit: (mode: OnboardingMode) => void;
+  onHome: () => void;
+  onWelcome: () => void;
+}) {
+  const selectedAge = AGE_GROUPS.find((group) => group.id === settings.ageGroup);
+
+  return (
+    <div className="flex flex-col min-h-full bg-gray-50">
+      <div className="px-5 pt-8 pb-5" style={{ background: "#183153" }}>
+        <button type="button" onClick={onHome} className="text-sm font-bold mb-3" style={{ color: "rgba(255,255,255,0.8)" }}>← 홈으로</button>
+        <h1 className="text-xl font-black text-white">설정</h1>
+      </div>
+      <div className="p-4 space-y-5">
+        <section>
+          <h2 className="text-xs font-bold px-1 mb-2" style={{ color: "#6B7280" }}>사용자 설정</h2>
+          <div className="bg-white rounded-2xl overflow-hidden border" style={{ borderColor: "#F3F4F6" }}>
+            <button type="button" onClick={() => onEdit("age")} className="w-full flex items-center justify-between p-4 text-left border-b" style={{ borderColor: "#F3F4F6" }}>
+              <span className="text-sm font-bold" style={{ color: "#183153" }}>연령대 변경</span>
+              <span className="text-xs" style={{ color: "#6B7280" }}>{selectedAge?.label} ›</span>
+            </button>
+            <button type="button" onClick={() => onEdit("location")} className="w-full flex items-center justify-between p-4 text-left">
+              <span className="text-sm font-bold" style={{ color: "#183153" }}>위험도 확인 지역 변경</span>
+              <span className="text-xs" style={{ color: "#6B7280" }}>{settings.district} ›</span>
+            </button>
+          </div>
+        </section>
+        <section>
+          <h2 className="text-xs font-bold px-1 mb-2" style={{ color: "#6B7280" }}>앱</h2>
+          <button type="button" onClick={onWelcome} className="w-full bg-white rounded-2xl p-4 text-left border text-sm font-bold" style={{ borderColor: "#F3F4F6", color: "#183153" }}>처음 화면으로 돌아가기</button>
+        </section>
       </div>
     </div>
   );
@@ -970,9 +1073,14 @@ function HomeScreen({ onNav, riskData }: { onNav: (s: Screen) => void; riskData:
             <MapPin size={14} color="white" />
             <span className="text-sm font-semibold text-white" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>서울시 {district}</span>
           </div>
-          <div className="flex items-center gap-1 text-xs" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Sans KR', sans-serif" }}>
-            <RefreshCw size={11} />
-            <span>방금 전 업데이트</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-xs" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Noto Sans KR', sans-serif" }}>
+              <RefreshCw size={11} />
+              <span>방금 전 업데이트</span>
+            </div>
+            <button type="button" onClick={() => onNav("settings")} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.14)" }} aria-label="설정 열기">
+              <Settings size={16} color="white" />
+            </button>
           </div>
         </div>
         <div className="flex items-end justify-between gap-4 mt-5">
@@ -1914,7 +2022,10 @@ function GuideScreen({ riskData }: { riskData: RiskApiResponse | null }) {
 const HOME_SCORE = DEMO_RISK_SCORE;
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("onboarding");
+  const [screen, setScreen] = useState<Screen>("welcome");
+  const [welcomeStarted, setWelcomeStarted] = useState(false);
+  const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>("full");
+  const [userSettings, setUserSettings] = useState<UserSettings>({ ageGroup: "0-9", province: "서울특별시", district: "" });
   const [riskData, setRiskData] = useState<RiskApiResponse | null>(null);
   const [selectedShelter, setSelectedShelter] = useState<SelectedShelter | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1926,15 +2037,28 @@ export default function App() {
     }
   }, [screen]);
 
+  const openSettingsEditor = (mode: OnboardingMode) => {
+    setOnboardingMode(mode);
+    setScreen("onboarding");
+  };
+
+  const completeOnboarding = (settings: UserSettings, data: RiskApiResponse) => {
+    setUserSettings(settings);
+    setRiskData(data);
+    setScreen("home");
+  };
+
   const renderScreen = () => {
     switch (screen) {
-      case "onboarding": return <OnboardingScreen onComplete={(data) => { setRiskData(data); setScreen("home"); }} />;
+      case "welcome": return <OnboardingScreen initialSettings={userSettings} mode="full" showWelcome onStarted={() => setWelcomeStarted(true)} onComplete={completeOnboarding} />;
+      case "onboarding": return <OnboardingScreen initialSettings={userSettings} mode={onboardingMode} onComplete={completeOnboarding} />;
       case "home": return <HomeScreen onNav={setScreen} riskData={riskData} />;
       case "heatmap": return <HeatmapScreen onNav={setScreen} riskData={riskData} />;
       case "analysis": return <AnalysisScreen riskData={riskData} />;
       case "shelter": return <ShelterScreen onNav={setScreen} riskData={riskData} onStartRoute={setSelectedShelter} />;
       case "nav": return <NavScreen onNav={setScreen} selectedShelter={selectedShelter} />;
       case "guide": return <GuideScreen riskData={riskData} />;
+      case "settings": return <SettingsScreen settings={userSettings} onEdit={openSettingsEditor} onHome={() => setScreen("home")} onWelcome={() => { setWelcomeStarted(false); setScreen("welcome"); }} />;
     }
   };
 
@@ -1969,8 +2093,8 @@ export default function App() {
           {renderScreen()}
         </div>
 
-        {/* Bottom nav (hidden on onboarding and route guidance) */}
-        {screen !== "onboarding" && screen !== "nav" && screen !== "heatmap" && (
+        {/* Bottom nav (hidden on welcome, onboarding, settings, heatmap and route guidance) */}
+        {screen !== "welcome" && screen !== "onboarding" && screen !== "nav" && screen !== "settings" && screen !== "heatmap" && (
           <div className="flex-shrink-0" style={{ background: "white" }}>
             <BottomNav current={screen} onNav={setScreen} />
             <div style={{ height: 8 }} />
@@ -1978,8 +2102,8 @@ export default function App() {
         )}
 
         {/* Home indicator */}
-        <div className="flex justify-center pb-2 flex-shrink-0" style={{ background: "white" }}>
-          <div className="w-28 h-1 rounded-full bg-gray-300" />
+        <div className="flex justify-center pb-2 flex-shrink-0" style={{ background: screen === "welcome" && !welcomeStarted ? "#183153" : "white" }}>
+          <div className="w-28 h-1 rounded-full" style={{ background: screen === "welcome" && !welcomeStarted ? "rgba(255,255,255,0.35)" : "#D1D5DB" }} />
         </div>
       </div>
     </div>
