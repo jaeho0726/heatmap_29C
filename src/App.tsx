@@ -436,8 +436,8 @@ function HomeScreen({ onNav }: { onNav: (s: Screen) => void }) {
                     <span className="text-sm font-medium" style={{ color: "#374151", fontFamily: "'Noto Sans KR', sans-serif" }}>{f.label}</span>
                     <span className="text-sm font-bold" style={{ color: f.color, fontFamily: "Inter, sans-serif" }}>{f.detail}</span>
                   </div>
-                  <div className="h-1.5 rounded-full" style={{ background: "#F3F4F6" }}>
-                    <div className="h-full rounded-full transition-all" style={{ width: `${f.value * 4}%`, background: f.color }} />
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#F3F4F6" }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(f.value * 2.5, 100)}%`, background: f.color }} />
                   </div>
                 </div>
               </div>
